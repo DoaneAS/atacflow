@@ -27,7 +27,7 @@ vim: syntax=groovy
 //params.index = '/home/asd2007/Scripts/nf/fripflow/sindex.tsv'
 
 
-   params.index = 'indexly7.nb.tsv'
+    params.index = 'indexly7.tsv'
    //params.index = 'indexpooled.tsv'
 params.genome = 'hg38'
 params.blacklist = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.blacklist.bed.gz"
@@ -121,11 +121,13 @@ fastq = Channel
               def list = line.split()
               def Sample = list[0]
               def path = file(list[1])
+              def reads = file("$path/*{1,2}*.fastq.gz")
+              // def readsp = "$path/*{R1,R2}.trim.fastq.gz"
               //  def R1 = file(list[2])
               //    def R2 = file(list[3])
               def message = '[INFO] '
               log.info message
-              [ Sample, path ]
+              [ Sample, path, reads ]
     }
 
 
@@ -145,22 +147,26 @@ fastq = Channel
 
 process bwamem {
 
+
     executor 'sge'
-    clusterOptions '-l h_vmem=4G -pe smp 8-12 -l h_rt=18:00:00 -l athena=true'
-    scratch "${TMPDIR}"
-       //     publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: true
-    input:
-    set Sample, file(path) from fastq
-    file(bwaref) from bwaref
+    clusterOptions '-l h_vmem=1G -pe smp 4 -l h_rt=1:00:00 -l athena=true'
+    //  cpus 12
+        scratch "${TMPDIR}"
+            //     publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: true
 
-   output:
-   set Sample, file("${Sample}.bam") into newbam
 
-   script:
-   def reads = "$path/*{R1,R2}.trim.fastq.gz"
+        input:
+        set Sample, file(path), file(reads) from fastq
+        file(bwaref) from bwaref
+
+        output:
+        set Sample, file("${Sample}.bam") into newbam
+
+        script:
+            //def reads = "$path/*{R1,R2}.trim.fastq.gz"
         """
         set -o pipefail
-        bwa mem -t $task.cpus -M /athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta ${reads} | samtools view -bS - > ${Sample}.bam
+        bwa mem -t 4 -M /athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta $reads | samtools view -bS - > ${Sample}.bam
         """
 
     }
@@ -190,7 +196,7 @@ process processbam {
 
     shell:
     '''
-    processAlignment.nf.sh !{nbam} !{BLACK} 18
+    processAlignment.nf.sh !{nbam} !{BLACK} !{task.cpus}
     '''
 }
 
@@ -208,8 +214,8 @@ fragsizes.subscribe { println "Received: " + file(fragsizes)}
 process nsortbam {
     // tag "$Sample"
 
-        cpus 22
-        memory '64 GB'
+        cpus 16
+        memory '32 GB'
 
         scratch "${TMPDIR}"
         publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: true
@@ -230,7 +236,7 @@ process nsortbam {
 
         """
         samtools index ${finalbam}
-        sambamba sort --memory-limit 50GB -n -t ${task.cpus} --out ${Sample}.nsorted.nodup.noM.bam ${finalbam}
+        sambamba sort --memory-limit 30GB -n -t ${task.cpus} --out ${Sample}.nsorted.nodup.noM.bam ${finalbam}
 
        ## mv ${finalbam} ${Sample}.sorted.nodup.noM.black.bam
         samtools index ${Sample}.sorted.nodup.noM.black.bam
@@ -302,7 +308,7 @@ process signalTrack {
 
 
         output:
-        set Sample, file("${Sample}.sizefactors1.bw") into signal
+        set Sample, file("${Sample}.sizefactors.bw") into signal
 
         script:
         """
@@ -311,7 +317,7 @@ process signalTrack {
             --outFileFormat bigwig --smoothLength 100 \
             --normalizeUsingRPKM --scaleFactor ${sz} \
             --maxFragmentLength 150 \
-            -o ${Sample}.sizefactors1.bw --centerReads --extendReads --numberOfProcessors ${task.cpus}
+            -o ${Sample}.sizefactors.bw --centerReads --extendReads --numberOfProcessors ${task.cpus}
 
         """
         }
