@@ -27,29 +27,65 @@ vim: syntax=groovy
 //params.index = '/home/asd2007/Scripts/nf/fripflow/sindex.tsv'
 
 
-    params.index = 'indexly7.tsv'
+
+version = 1.1
+
+// SET PARAMS 
+params.index = 'sampleIndex.csv'
    //params.index = 'indexpooled.tsv'
 params.genome = 'hg38'
 params.blacklist = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.blacklist.bed.gz"
 genome = file(params.genome)
 index = file(params.index)
 params.chrsz = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chrom.sizes"
-
 params.ref = "/athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
+params.name = false
+params.project = false
+params.fasta = params.genome ? params.genomes[ params.genome ].fasta ?: false : false
+params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
+params.notrim = false
+params.saveReference = false
+params.saveTrimmed = false
+params.saveAlignedIntermediates = false
+params.broad = false
+params.outdir = './results'
+params.email = 'ashley.doane@gmail.com'
+params.chromsizes = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chrom.sizes"
 
-////// Print parameters ///////
-log.info ''
-log.info ''
-log.info 'A T A C - S e q  ~ P R O C E S S'
-log.info '---------------------------------'
-log.info ''
-log.info "Index File             : ${params.index}"
-log.info ''
+
+// Header log info
+log.info "=================================================================="
+log.info " Elemento-Melnick-Labs-ATACseq: ATAC-Seq Best Practice v${version}"
+log.info "==================================================================="
+def summary = [:]
+summary['Run Name']     = custom_runName ?: workflow.runName
+summary['Reads']        = params.reads
+summary['Genome']       = params.genome
+if(params.bwa_index)  summary['BWA Index'] = params.bwa_index
+else if(params.fasta) summary['Fasta Ref'] = params.fasta
+summary['Current home']   = "$HOME"
+summary['Current user']   = "$USER"
+summary['Current path']   = "$PWD"
+summary['Working dir']    = workflow.workDir
+summary['Output dir']     = params.outdir
+summary['Script dir']     = workflow.projectDir
+summary['Save Reference'] = params.saveReference
+summary['Save Trimmed']   = params.saveTrimmed
+summary['Save Intermeds'] = params.saveAlignedIntermediates
+if(params.notrim)       summary['Trimming Step'] = 'Skipped'
+if( params.clip_r1 > 0) summary['Trim R1'] = params.clip_r1
+if( params.clip_r2 > 0) summary['Trim R2'] = params.clip_r2
+if( params.three_prime_clip_r1 > 0) summary["Trim 3' R1"] = params.three_prime_clip_r1
+if( params.three_prime_clip_r2 > 0) summary["Trim 3' R2"] = params.three_prime_clip_r2
+if(params.email) summary['E-mail Address'] = params.email
+if(workflow.commitId) summary['Pipeline Commit']= workflow.commitId
+log.info summary.collect { k,v -> "${k.padRight(15)}: $v" }.join("\n")
+log.info "===================================="
 
 index = file(params.index)
 
 bwaref = file(params.ref)
-results_path = "$PWD/results"
+results_path = "./results"
 
 blacklist=file(params.blacklist)
 
@@ -113,15 +149,13 @@ sizefactors = Channel.from(1)
 *
 */
 
-
-
 fastq = Channel
        .from(index.readLines())
        .map { line ->
-              def list = line.split()
+              def list = line.split(',')
               def Sample = list[0]
               def path = file(list[1])
-              def reads = file("$path/*{1,2}*.fastq.gz")
+              def reads = file("$path/*{R1,R2}.trim.fastq.gz")
               // def readsp = "$path/*{R1,R2}.trim.fastq.gz"
               //  def R1 = file(list[2])
               //    def R2 = file(list[3])
@@ -129,6 +163,8 @@ fastq = Channel
               log.info message
               [ Sample, path, reads ]
     }
+
+       
 
 
 
@@ -148,10 +184,9 @@ fastq = Channel
 process bwamem {
 
 
-    executor 'sge'
-    clusterOptions '-l h_vmem=1G -pe smp 4 -l h_rt=1:00:00 -l athena=true'
-    //  cpus 12
-        scratch "${TMPDIR}"
+        executor 'sge'
+        scratch true
+        clusterOptions '-l h_vmem=5G -pe smp 4 -l h_rt=96:00:00 -l athena=true'
             //     publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: true
 
 
@@ -163,9 +198,10 @@ process bwamem {
         set Sample, file("${Sample}.bam") into newbam
 
         script:
-            //def reads = "$path/*{R1,R2}.trim.fastq.gz"
         """
+        #!/bin/bash -l
         set -o pipefail
+        spack load bwa
         bwa mem -t 4 -M /athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta $reads | samtools view -bS - > ${Sample}.bam
         """
 
@@ -178,8 +214,11 @@ process bwamem {
 
 process processbam {
 
-    cpus 18
-    scratch "${TMPDIR}"
+
+    executor 'sge'
+    clusterOptions '-l h_vmem=5G -pe smp 4 -l h_rt=16:00:00 -l athena=true'
+    scratch true
+
     publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: true
 
     input:
@@ -194,15 +233,12 @@ process processbam {
     file("*window500.hist_data") into hist_data
     file("*window500.hist_graph.pdf") into fragsizes
 
-    shell:
-    '''
-    processAlignment.nf.sh !{nbam} !{BLACK} !{task.cpus}
-    '''
+    script:
+    """
+    #!/bin/bash -l
+    processAlignment.nf.sh $nbam $BLACK 4
+    """
 }
-
-
-
-
 
 
 
@@ -214,10 +250,9 @@ fragsizes.subscribe { println "Received: " + file(fragsizes)}
 process nsortbam {
     // tag "$Sample"
 
-        cpus 16
-        memory '32 GB'
+        cpus 4
+        memory '20 GB'
 
-        scratch "${TMPDIR}"
         publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: true
 
         input:
@@ -227,6 +262,7 @@ process nsortbam {
         set Sample, file("${Sample}.nsorted.nodup.noM.bam") into nsortedbam
         // set Sample, file("${Sample}.sorted.nodup.noM.black.bam"), file("${Sample}.sorted.nodup.noM.black.bam.bai") into bamforsignal
         set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into bamforsignal
+        set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into finalbamforqc
             //val sf into sizefactors
 
         script:
@@ -236,7 +272,7 @@ process nsortbam {
 
         """
         samtools index ${finalbam}
-        sambamba sort --memory-limit 30GB -n -t ${task.cpus} --out ${Sample}.nsorted.nodup.noM.bam ${finalbam}
+        sambamba sort --memory-limit 18GB -n -t ${task.cpus} --out ${Sample}.nsorted.nodup.noM.bam ${finalbam}
 
        ## mv ${finalbam} ${Sample}.sorted.nodup.noM.black.bam
         samtools index ${Sample}.sorted.nodup.noM.black.bam
@@ -283,6 +319,7 @@ process callpeaks {
     set Sample, file("${Sample}.tag.narrow_summits.bed") into summits
     set Sample, file("${Sample}.tn5.broadPeak.gz") into broadpeak
 
+
     script:
     """
     macs2 callpeak -t ${rbed} -f BED -n ${Sample}.tag.narrow -g hs --nomodel --shift -75 --extsize 150 --keep-dup all --call-summits -p 1e-3
@@ -298,9 +335,11 @@ process callpeaks {
 process signalTrack {
     // tag "$Sample"
 
-    cpus 16
+        executor 'sge'
+        clusterOptions '-l h_vmem=5G -pe smp 4 -l h_rt=16:00:00 -l athena=true'
+        scratch true
+        publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: true
 
-        publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
 
         input:
         set Sample, file(sbam) from bamforsignal
@@ -317,10 +356,54 @@ process signalTrack {
             --outFileFormat bigwig --smoothLength 100 \
             --normalizeUsingRPKM --scaleFactor ${sz} \
             --maxFragmentLength 150 \
-            -o ${Sample}.sizefactors.bw --centerReads --extendReads --numberOfProcessors ${task.cpus}
+            -o ${Sample}.sizefactors.bw --centerReads --extendReads --numberOfProcessors 4
 
         """
         }
+
+
+
+
+process frip {
+
+    publishDir "$results_path/$Sample/qc", mode: 'copy', overwrite: true
+
+        input:
+        set sname, file(bed) from finalbedpe
+        set Sample, file(peaks) from broadpeak
+
+        output:
+        set sname, file("${sname}.frip.txt") into frips
+
+        script:
+        """
+        getFripQC.py --bed ${bed} --peaks ${peaks} --out ${sname}.frip.txt
+        """
+        }
+
+
+
+process atacqc {
+
+    publishDir "$results_path/$Sample/qc", mode: 'copy', overwrite: true
+
+        input:
+        file(pbcqc)
+        set Sample, file(finalbamforqc) from nsortbam
+
+
+        output:
+        set Sample, file("QCmetrics/${Sample}.picardcomplexity.qc") into picardcomplexity.qc
+        set Sample, file("*.preseq.dat"), file("*_qc.txt") into atacqc
+
+        script:
+        """
+        ./run_atacqc.athena.nf.sh -s ${Sample} -g hg38
+        """
+
+
+    }
+
 
 /*
 *process nsortbam {
@@ -468,3 +551,85 @@ workflow.onComplete {
     Error report: ${workflow.errorReport ?: '-'}
     """
 }
+
+
+
+
+/*
+ * Completion e-mail notification
+ */
+workflow.onComplete {
+
+    // Set up the e-mail variables
+    def subject = "[OElab-ATACseq] Successful: $workflow.runName"
+    if(!workflow.success){
+      subject = "[OElab-ATACseq] FAILED: $workflow.runName"
+    }
+    def email_fields = [:]
+    email_fields['version'] = version
+    email_fields['runName'] = custom_runName ?: workflow.runName
+    email_fields['success'] = workflow.success
+    email_fields['dateComplete'] = workflow.complete
+    email_fields['duration'] = workflow.duration
+    email_fields['exitStatus'] = workflow.exitStatus
+    email_fields['errorMessage'] = (workflow.errorMessage ?: 'None')
+    email_fields['errorReport'] = (workflow.errorReport ?: 'None')
+    email_fields['commandLine'] = workflow.commandLine
+    email_fields['projectDir'] = workflow.projectDir
+    email_fields['summary'] = summary
+    email_fields['summary']['Date Started'] = workflow.start
+    email_fields['summary']['Date Completed'] = workflow.complete
+    email_fields['summary']['Nextflow Version'] = workflow.nextflow.version
+    email_fields['summary']['Nextflow Build'] = workflow.nextflow.build
+    email_fields['summary']['Nextflow Compile Timestamp'] = workflow.nextflow.timestamp
+    email_fields['summary']['Pipeline script file path'] = workflow.scriptFile
+    email_fields['summary']['Pipeline script hash ID'] = workflow.scriptId
+    if(workflow.repository) email_fields['summary']['Pipeline repository Git URL'] = workflow.repository
+    if(workflow.commitId) email_fields['summary']['Pipeline repository Git Commit'] = workflow.commitId
+    if(workflow.revision) email_fields['summary']['Pipeline Git branch/tag'] = workflow.revision
+    if(workflow.container) email_fields['summary']['Singularity image'] = workflow.container
+
+    // Render the TXT template
+    def engine = new groovy.text.GStringTemplateEngine()
+    def tf = new File("$baseDir/assets/email_template.txt")
+    def txt_template = engine.createTemplate(tf).make(email_fields)
+    def email_txt = txt_template.toString()
+
+    // Render the HTML template
+    def hf = new File("$baseDir/assets/email_template.html")
+    def html_template = engine.createTemplate(hf).make(email_fields)
+    def email_html = html_template.toString()
+
+    // Render the sendmail template
+    def smail_fields = [ email: params.email, subject: subject, email_txt: email_txt, email_html: email_html, baseDir: "$baseDir" ]
+    def sf = new File("$baseDir/assets/sendmail_template.txt")
+    def sendmail_template = engine.createTemplate(sf).make(smail_fields)
+    def sendmail_html = sendmail_template.toString()
+
+    // Send the HTML e-mail
+    if (params.email) {
+        try {
+          // Try to send HTML e-mail using sendmail
+          [ 'sendmail', '-t' ].execute() << sendmail_html
+          log.debug "[NGI-ChIPseq] Sent summary e-mail using sendmail"
+        } catch (all) {
+          // Catch failures and try with plaintext
+          [ 'mail', '-s', subject, params.email ].execute() << email_txt
+          log.debug "[OElab-ATACseq] Sendmail failed, failing back to sending summary e-mail using mail"
+        }
+        log.info "[OElab-ATACseq] Sent summary e-mail to $params.email"
+    }
+
+    // Write summary e-mail HTML to a file
+    def output_d = new File( "${params.outdir}/Documentation/" )
+    if( !output_d.exists() ) {
+      output_d.mkdirs()
+    }
+    def output_hf = new File( output_d, "pipeline_report.html" )
+    output_hf.withWriter { w -> w << email_html }
+    def output_tf = new File( output_d, "pipeline_report.txt" )
+    output_tf.withWriter { w -> w << email_txt }
+
+    log.info "[OElab-ATACseq] Pipeline Complete"
+}
+
