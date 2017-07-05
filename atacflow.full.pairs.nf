@@ -30,19 +30,22 @@ vim: syntax=groovy
 
 version = 1.1
 
-// SET PARAMS 
+// SET PARAMS
+
+params.name = 'ecadlowpass'
+params.project = false
 params.index = 'sampleIndex.csv'
    //params.index = 'indexpooled.tsv'
 params.genome = 'hg38'
 params.blacklist = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.blacklist.bed.gz"
-genome = file(params.genome)
+       //genome = file(params.genome)
 index = file(params.index)
 params.chrsz = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chrom.sizes"
 params.ref = "/athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
 params.name = false
 params.project = false
-params.fasta = params.genome ? params.genomes[ params.genome ].fasta ?: false : false
-params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
+       //params.fasta = params.genome ? params.genomes[ params.genome ].fasta ?: false : false
+       //params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
 params.notrim = false
 params.saveReference = false
 params.saveTrimmed = false
@@ -52,6 +55,11 @@ params.outdir = './results'
 params.email = 'ashley.doane@gmail.com'
 params.chromsizes = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chrom.sizes"
 
+
+custom_runName = params.name
+if( !(workflow.runName ==~ /[a-z]+_[a-z]+/) ){
+    custom_runName = workflow.runName
+}
 
 // Header log info
 log.info "=================================================================="
@@ -72,11 +80,6 @@ summary['Script dir']     = workflow.projectDir
 summary['Save Reference'] = params.saveReference
 summary['Save Trimmed']   = params.saveTrimmed
 summary['Save Intermeds'] = params.saveAlignedIntermediates
-if(params.notrim)       summary['Trimming Step'] = 'Skipped'
-if( params.clip_r1 > 0) summary['Trim R1'] = params.clip_r1
-if( params.clip_r2 > 0) summary['Trim R2'] = params.clip_r2
-if( params.three_prime_clip_r1 > 0) summary["Trim 3' R1"] = params.three_prime_clip_r1
-if( params.three_prime_clip_r2 > 0) summary["Trim 3' R2"] = params.three_prime_clip_r2
 if(params.email) summary['E-mail Address'] = params.email
 if(workflow.commitId) summary['Pipeline Commit']= workflow.commitId
 log.info summary.collect { k,v -> "${k.padRight(15)}: $v" }.join("\n")
@@ -120,34 +123,6 @@ sizefactors = Channel.from(1)
 
 
 
-/*
- *fastqs = Channel
- *       .from(index.readLines())
- *       .map { line ->
- *              def list = line.split()
- *              def mergeId = list[0]
- *              def id = list[1]
- *              def path = file(list[2])
- *              def message = '[INFO] '
- *              log.info message
- *              def quality = fastq(path).qualityScore()
- *              [ mergeId, id, path, quality ]
- *    }
-*
-*
-*pooled = Channel
-*       .from(index.readLines())
-*       .map { line ->
-*              def list = line.split()
-*              def Sample = list[0]
-*              def path = file(list[1])
-*              def sizefactor = list[2]
-*              def message = '[INFO] '
-*              log.info message
-*              [ Sample, path, sizefactor ]
-*    }
-*
-*/
 
 fastq = Channel
        .from(index.readLines())
@@ -187,12 +162,12 @@ process bwamem {
         executor 'sge'
         scratch true
         clusterOptions '-l h_vmem=5G -pe smp 4 -l h_rt=96:00:00 -l athena=true'
-            //     publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: true
+        publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
 
 
         input:
         set Sample, file(path), file(reads) from fastq
-        file(bwaref) from bwaref
+            //file(bwaref) from bwaref
 
         output:
         set Sample, file("${Sample}.bam") into newbam
@@ -219,7 +194,7 @@ process processbam {
     clusterOptions '-l h_vmem=5G -pe smp 4 -l h_rt=16:00:00 -l athena=true'
     scratch true
 
-    publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: true
+    publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
 
     input:
     set Sample, file(nbam) from newbam
@@ -253,7 +228,7 @@ process nsortbam {
         cpus 4
         memory '20 GB'
 
-        publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: true
+        publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
 
         input:
         set Sample, file(finalbam) from finalbam
@@ -285,7 +260,7 @@ process nsortbam {
 
 process bam2bed {
 
-    publishDir  "$results_path/$Sample/$Sample", mode: 'copy', overwrite: true
+    publishDir  "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
 
     input:
     set Sample, file(nsbam) from nsortedbam
@@ -309,7 +284,7 @@ process bam2bed {
 
 process callpeaks {
 
-    publishDir  "$results_path/$Sample/$Sample", mode: 'copy', overwrite: true
+    publishDir  "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
 
     input:
     set Sample, file(rbed) from finalbed
@@ -338,12 +313,12 @@ process signalTrack {
         executor 'sge'
         clusterOptions '-l h_vmem=5G -pe smp 4 -l h_rt=16:00:00 -l athena=true'
         scratch true
-        publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: true
+        publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
 
 
         input:
         set Sample, file(sbam) from bamforsignal
-        val sz from sizefactors
+            //val sz from sizefactors
 
 
         output:
@@ -351,10 +326,10 @@ process signalTrack {
 
         script:
         """
-        samtools index ${sbam} &&
-        bamCoverage --bam ${sbam} --binSize 5 \
-            --outFileFormat bigwig --smoothLength 100 \
-            --normalizeUsingRPKM --scaleFactor ${sz} \
+        samtools index ${sbam}
+        bamCoverage --bam ${sbam} --binSize 20 \
+            --outFileFormat bigwig --smoothLength 120 \
+            --normalizeUsingRPKM  \
             --maxFragmentLength 150 \
             -o ${Sample}.sizefactors.bw --centerReads --extendReads --numberOfProcessors 4
 
@@ -382,27 +357,29 @@ process frip {
         }
 
 
-
-process atacqc {
-
-    publishDir "$results_path/$Sample/qc", mode: 'copy', overwrite: true
-
-        input:
-        file(pbcqc)
-        set Sample, file(finalbamforqc) from nsortbam
-
-
-        output:
-        set Sample, file("QCmetrics/${Sample}.picardcomplexity.qc") into picardcomplexity.qc
-        set Sample, file("*.preseq.dat"), file("*_qc.txt") into atacqc
-
-        script:
-        """
-        ./run_atacqc.athena.nf.sh -s ${Sample} -g hg38
-        """
-
-
-    }
+/*
+ *
+ *process atacqc {
+ *
+ *    publishDir "$results_path/$Sample/qc", mode: 'copy', overwrite: true
+ *
+ *        input:
+ *        file(pbcqc)
+ *        set Sample, file(finalbamforqc) from nsortbam
+ *
+ *
+ *        output:
+ *        set Sample, file("QCmetrics/${Sample}.picardcomplexity.qc") into picardcomplexity.qc
+ *        set Sample, file("*.preseq.dat"), file("*_qc.txt") into atacqc
+ *
+ *        script:
+ *        """
+ *        ./run_atacqc.athena.nf.sh -s ${Sample} -g hg38
+ *        """
+ *
+ *
+ *    }
+ */
 
 
 /*
