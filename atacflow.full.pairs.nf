@@ -211,10 +211,9 @@ process processbam {
     script:
     """
     #!/bin/bash -l
-    processAlignment.nf.sh $nbam $BLACK 4
+    processAlignment.nf.sh ${nbam} ${BLACK} 4
     """
 }
-
 
 
 hist_data.subscribe { println "Received: " + file(hist_data)}
@@ -311,7 +310,7 @@ process signalTrack {
     // tag "$Sample"
 
         executor 'sge'
-        clusterOptions '-l h_vmem=5G -pe smp 4 -l h_rt=16:00:00 -l athena=true'
+        clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=16:00:00 -l athena=true'
         scratch true
         publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
 
@@ -326,12 +325,14 @@ process signalTrack {
 
         script:
         """
+        #!/bin/bash -l
+        spack load samtools
         samtools index ${sbam}
         bamCoverage --bam ${sbam} --binSize 20 \
             --outFileFormat bigwig --smoothLength 120 \
             --normalizeUsingRPKM  \
             --maxFragmentLength 150 \
-            -o ${Sample}.sizefactors.bw --centerReads --extendReads --numberOfProcessors 4
+            -o ${Sample}.sizefactors.bw --centerReads --extendReads --numberOfProcessors 8
 
         """
         }
@@ -534,79 +535,80 @@ workflow.onComplete {
 
 /*
  * Completion e-mail notification
+ *
+ *workflow.onComplete {
+ *
+ *    // Set up the e-mail variables
+ *    def subject = "[OElab-ATACseq] Successful: $workflow.runName"
+ *    if(!workflow.success){
+ *      subject = "[OElab-ATACseq] FAILED: $workflow.runName"
+ *    }
+ *    def email_fields = [:]
+ *    email_fields['version'] = version
+ *    email_fields['runName'] = custom_runName ?: workflow.runName
+ *    email_fields['success'] = workflow.success
+ *    email_fields['dateComplete'] = workflow.complete
+ *    email_fields['duration'] = workflow.duration
+ *    email_fields['exitStatus'] = workflow.exitStatus
+ *    email_fields['errorMessage'] = (workflow.errorMessage ?: 'None')
+ *    email_fields['errorReport'] = (workflow.errorReport ?: 'None')
+ *    email_fields['commandLine'] = workflow.commandLine
+ *    email_fields['projectDir'] = workflow.projectDir
+ *    email_fields['summary'] = summary
+ *    email_fields['summary']['Date Started'] = workflow.start
+ *    email_fields['summary']['Date Completed'] = workflow.complete
+ *    email_fields['summary']['Nextflow Version'] = workflow.nextflow.version
+ *    email_fields['summary']['Nextflow Build'] = workflow.nextflow.build
+ *    email_fields['summary']['Nextflow Compile Timestamp'] = workflow.nextflow.timestamp
+ *    email_fields['summary']['Pipeline script file path'] = workflow.scriptFile
+ *    email_fields['summary']['Pipeline script hash ID'] = workflow.scriptId
+ *    if(workflow.repository) email_fields['summary']['Pipeline repository Git URL'] = workflow.repository
+ *    if(workflow.commitId) email_fields['summary']['Pipeline repository Git Commit'] = workflow.commitId
+ *    if(workflow.revision) email_fields['summary']['Pipeline Git branch/tag'] = workflow.revision
+ *    if(workflow.container) email_fields['summary']['Singularity image'] = workflow.container
+ *
+ *    // Render the TXT template
+ *    def engine = new groovy.text.GStringTemplateEngine()
+ *    def tf = new File("$baseDir/assets/email_template.txt")
+ *    def txt_template = engine.createTemplate(tf).make(email_fields)
+ *    def email_txt = txt_template.toString()
+ *
+ *    // Render the HTML template
+ *    def hf = new File("$baseDir/assets/email_template.html")
+ *    def html_template = engine.createTemplate(hf).make(email_fields)
+ *    def email_html = html_template.toString()
+ *
+ *    // Render the sendmail template
+ *    def smail_fields = [ email: params.email, subject: subject, email_txt: email_txt, email_html: email_html, baseDir: "$baseDir" ]
+ *    def sf = new File("$baseDir/assets/sendmail_template.txt")
+ *    def sendmail_template = engine.createTemplate(sf).make(smail_fields)
+ *    def sendmail_html = sendmail_template.toString()
+ *
+ *    // Send the HTML e-mail
+ *    if (params.email) {
+ *        try {
+ *          // Try to send HTML e-mail using sendmail
+ *          [ 'sendmail', '-t' ].execute() << sendmail_html
+ *          log.debug "[NGI-ChIPseq] Sent summary e-mail using sendmail"
+ *        } catch (all) {
+ *          // Catch failures and try with plaintext
+ *          [ 'mail', '-s', subject, params.email ].execute() << email_txt
+ *          log.debug "[OElab-ATACseq] Sendmail failed, failing back to sending summary e-mail using mail"
+ *        }
+ *        log.info "[OElab-ATACseq] Sent summary e-mail to $params.email"
+ *    }
+ *
+ *    // Write summary e-mail HTML to a file
+ *    def output_d = new File( "${params.outdir}/Documentation/" )
+ *    if( !output_d.exists() ) {
+ *      output_d.mkdirs()
+ *    }
+ *    def output_hf = new File( output_d, "pipeline_report.html" )
+ *    output_hf.withWriter { w -> w << email_html }
+ *    def output_tf = new File( output_d, "pipeline_report.txt" )
+ *    output_tf.withWriter { w -> w << email_txt }
+ *
+ *    log.info "[OElab-ATACseq] Pipeline Complete"
+ *}
  */
-workflow.onComplete {
-
-    // Set up the e-mail variables
-    def subject = "[OElab-ATACseq] Successful: $workflow.runName"
-    if(!workflow.success){
-      subject = "[OElab-ATACseq] FAILED: $workflow.runName"
-    }
-    def email_fields = [:]
-    email_fields['version'] = version
-    email_fields['runName'] = custom_runName ?: workflow.runName
-    email_fields['success'] = workflow.success
-    email_fields['dateComplete'] = workflow.complete
-    email_fields['duration'] = workflow.duration
-    email_fields['exitStatus'] = workflow.exitStatus
-    email_fields['errorMessage'] = (workflow.errorMessage ?: 'None')
-    email_fields['errorReport'] = (workflow.errorReport ?: 'None')
-    email_fields['commandLine'] = workflow.commandLine
-    email_fields['projectDir'] = workflow.projectDir
-    email_fields['summary'] = summary
-    email_fields['summary']['Date Started'] = workflow.start
-    email_fields['summary']['Date Completed'] = workflow.complete
-    email_fields['summary']['Nextflow Version'] = workflow.nextflow.version
-    email_fields['summary']['Nextflow Build'] = workflow.nextflow.build
-    email_fields['summary']['Nextflow Compile Timestamp'] = workflow.nextflow.timestamp
-    email_fields['summary']['Pipeline script file path'] = workflow.scriptFile
-    email_fields['summary']['Pipeline script hash ID'] = workflow.scriptId
-    if(workflow.repository) email_fields['summary']['Pipeline repository Git URL'] = workflow.repository
-    if(workflow.commitId) email_fields['summary']['Pipeline repository Git Commit'] = workflow.commitId
-    if(workflow.revision) email_fields['summary']['Pipeline Git branch/tag'] = workflow.revision
-    if(workflow.container) email_fields['summary']['Singularity image'] = workflow.container
-
-    // Render the TXT template
-    def engine = new groovy.text.GStringTemplateEngine()
-    def tf = new File("$baseDir/assets/email_template.txt")
-    def txt_template = engine.createTemplate(tf).make(email_fields)
-    def email_txt = txt_template.toString()
-
-    // Render the HTML template
-    def hf = new File("$baseDir/assets/email_template.html")
-    def html_template = engine.createTemplate(hf).make(email_fields)
-    def email_html = html_template.toString()
-
-    // Render the sendmail template
-    def smail_fields = [ email: params.email, subject: subject, email_txt: email_txt, email_html: email_html, baseDir: "$baseDir" ]
-    def sf = new File("$baseDir/assets/sendmail_template.txt")
-    def sendmail_template = engine.createTemplate(sf).make(smail_fields)
-    def sendmail_html = sendmail_template.toString()
-
-    // Send the HTML e-mail
-    if (params.email) {
-        try {
-          // Try to send HTML e-mail using sendmail
-          [ 'sendmail', '-t' ].execute() << sendmail_html
-          log.debug "[NGI-ChIPseq] Sent summary e-mail using sendmail"
-        } catch (all) {
-          // Catch failures and try with plaintext
-          [ 'mail', '-s', subject, params.email ].execute() << email_txt
-          log.debug "[OElab-ATACseq] Sendmail failed, failing back to sending summary e-mail using mail"
-        }
-        log.info "[OElab-ATACseq] Sent summary e-mail to $params.email"
-    }
-
-    // Write summary e-mail HTML to a file
-    def output_d = new File( "${params.outdir}/Documentation/" )
-    if( !output_d.exists() ) {
-      output_d.mkdirs()
-    }
-    def output_hf = new File( output_d, "pipeline_report.html" )
-    output_hf.withWriter { w -> w << email_html }
-    def output_tf = new File( output_d, "pipeline_report.txt" )
-    output_tf.withWriter { w -> w << email_txt }
-
-    log.info "[OElab-ATACseq] Pipeline Complete"
-}
 
