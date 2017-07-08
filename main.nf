@@ -71,7 +71,7 @@ log.info " Elemento-Melnick-Labs-ATACseq: ATAC-Seq Best Practice v${version}"
 log.info "==================================================================="
 def summary = [:]
 summary['Run Name']     = custom_runName ?: workflow.runName
-summary['Reads']        = params.reads
+       //summary['Reads']        = params.reads
 summary['Genome']       = params.genome
 if(params.bwa_index)  summary['BWA Index'] = params.bwa_index
 else if(params.fasta) summary['Fasta Ref'] = params.fasta
@@ -134,7 +134,7 @@ fastq = Channel
               def list = line.split(',')
               def Sample = list[0]
               def path = file(list[1])
-              def reads = file("$baseDir/$path/*{R1,R2}.trim.fastq.gz")
+              def reads = file("$path/*{R1,R2}.trim.fastq.gz")
               // def readsp = "$path/*{R1,R2}.trim.fastq.gz"
               //  def R1 = file(list[2])
               //    def R2 = file(list[3])
@@ -142,9 +142,6 @@ fastq = Channel
               log.info message
               [ Sample, path, reads ]
     }
-
-       
-
 
 bcellrefpeaks = Channel.fromPath(params.bcellrefpeak)
 
@@ -154,7 +151,6 @@ lncaprefpeaks = Channel.fromPath(params.lncaprefpeak)
 //       .fromFilePairs( params.reads )                                             
 //       .ifEmpty { error "Cannot find any reads matching: ${params.reads}" }
 //        .set { read_pairs }
-  
 
 
 
@@ -205,7 +201,9 @@ process processbam {
 
     output:
     set Sample, file("${Sample}.sorted.bam") into sortedbam
+    set Sample, file("${Sample}.sorted.bam") into sortedbamqc
     set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into finalbam
+    set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into finalbamqc
     file("*.pbc.qc") into pbcqc
     file("*nsort.fixmate.bam") into fixmatebam
     file("*window500.hist_data") into hist_data
@@ -268,6 +266,7 @@ process bam2bed {
     set Sample, file(nsbam) from nsortedbam
 
     output:
+    set Sample, file("${Sample}.nodup.tn5.tagAlign.gz") into finalbedqc
     set Sample, file("${Sample}.nodup.tn5.tagAlign.gz") into finalbed
     set Sample, file("${Sample}.nodup.bedpe.gz") into finalbedpe
 
@@ -312,33 +311,33 @@ process callpeaks {
 process signalTrack {
     // tag "$Sample"
 
-        executor 'sge'
-        clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=16:00:00 -l athena=true'
-        scratch true
-        publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
+    publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
+    executor 'sge'
+    clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=16:00:00 -l athena=true'
+    scratch true
 
 
-        input:
-        set Sample, file(sbam) from bamforsignal
-            //val sz from sizefactors
+    input:
+    set Sample, file(sbam) from bamforsignal
+        //val sz from sizefactors
 
 
-        output:
-        set Sample, file("${Sample}.sizefactors.bw") into signal
+    output:
+    set Sample, file("${Sample}.sizefactors.bw") into signal
 
-        script:
-        """
-        #!/bin/bash -l
-        spack load samtools
-        samtools index ${sbam}
-        bamCoverage --bam ${sbam} --binSize 20 \
-            --outFileFormat bigwig --smoothLength 120 \
-            --normalizeUsingRPKM  \
-            --maxFragmentLength 150 \
-            -o ${Sample}.sizefactors.bw --centerReads --extendReads --numberOfProcessors 8
+    script:
+    """
+    #!/bin/bash -l
+    spack load samtools
+    samtools index ${sbam}
+    bamCoverage --bam ${sbam} --binSize 20 \
+        --outFileFormat bigwig --smoothLength 120 \
+        --normalizeUsingRPKM  \
+        --maxFragmentLength 150 \
+        -o ${Sample}.sizefactors.bw --centerReads --extendReads --numberOfProcessors 8
 
-        """
-        }
+    """
+    }
 
 
 
@@ -380,8 +379,11 @@ process frip {
          set Sample, file(finalbamforqc) from finalbamforqc
          set Sample, file(nbamforqc) from nsortedbamforqc
          set Sample, file(broadpeaks) from broadpeakqc
+         set Sample, file(finalbedqc) from finalbedqc
+         set Sample, file(sortedbamqc) from sortedbamqc
 
          output:
+         set Sample, file("QCmetrics/raw/*") into picardraw
          set Sample, file("QCmetrics/*.picardcomplexity.qc") into picardcomplexity
          set Sample, file("*.preseq.dat"), file("*_qc.txt"), file("*large_vplot.png"), file("*vplot.png") into qcdat1
          set Sample, file("*.log"), file("*qc") into logs
@@ -389,140 +391,10 @@ process frip {
 
          script:
          """
-         run_atacqc.athena.nf.sh -s ${Sample} -g hg38
+         run_ataqc.athena.nf.sh -s $Sample -g hg38
          """
 
-     }
-
-
-
-/*
-*process nsortbam {
-*    // tag "$Sample"
-*
-*        cpus 16
-*        memory '32 GB'
-*
-*        scratch "${TMPDIR}"
-*        publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: true
-*
-*        input:
-*        set Sample, file(sbam) from sortedbam
-*
-*        output:
-*        set Sample, file("${Sample}.nsorted.nodup.noM.bam") into nsortedbam
-*        // set Sample, file("${Sample}.sorted.nodup.noM.black.bam"), file("${Sample}.sorted.nodup.noM.black.bam.bai") into bamforsignal
-*        set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into bamforsignal
-*        val sf into sizefactors
-*
-*        script:
-*            //def fbam = file(finalbam)
-*            // finalbam.renameTo("${Sample}.sorted.nodup.noM.black.bam")
-*
-*        """
-*        samtools index ${finalbam}
-*        sambamba sort --memory-limit 30GB -n -t ${task.cpus} --out ${Sample}.nsorted.nodup.noM.bam ${finalbam}
-*
-*        mv ${finalbam} ${Sample}.sorted.nodup.noM.black.bam
-*        samtools index ${Sample}.sorted.nodup.noM.black.bam
-*        """
-*}
-*
-*
-*
-  * *process fixmatebam {
-  * *
-  * *    // publishDir  "$results_path/$sname", mode: 'move', overwrite: false
-  * *
-  * *        input:
-  * *        set Sample, file(nsbam) from nsortedbam
-  * *
-  * *        output:
-  * *        set Sample, file("${Sample}.nsorted.fixmate.nodup.noM.bam") into fixbam
-  * *
-  * *        script:
-  * *        """
-  * *        samtools fixmate ${nsbam} ${Sample}.nsorted.fixmate.nodup.noM.bam
-  * *         """
-  * *        }
-  * *
-*
-*
-*process bam2bed {
-*
-*    publishDir  "$results_path/$Sample/$Sample", mode: 'copy', overwrite: true
-*
-*    input:
-*    set Sample, file(nsbam) from nsortedbam
-*
-*    output:
-*    set Sample, file("${Sample}.nodup.tn5.tagAlign.gz") into finalbed
-*    set Sample, file("${Sample}.nodup.bedpe.gz") into finalbedpe
-*
-*
-*    script:
-*    """
-*    samtools fixmate ${nsbam} ${Sample}.nsorted.fixmate.nodup.noM.bam
-*    convertBAMtoBED.sh ${Sample}.nsorted.fixmate.nodup.noM.bam
-*    cp ${Sample}.nsorted.fixmate.nodup.noM.tn5.tagAlign.gz  ${Sample}.nodup.tn5.tagAlign.gz
-*    cp ${Sample}.nsorted.fixmate.nodup.noM.bedpe.gz ${Sample}.nodup.bedpe.gz
-*    """
-*        }
-*
-*
-*
-*
-*process callpeaks {
-*
-*    publishDir  "$results_path/$Sample/$Sample", mode: 'copy', overwrite: true
-*
-*    input:
-*    set Sample, file(rbed) from finalbed
-*
-*    output:
-*    set Sample, file("${Sample}.tn5.narrowPeak.gz") into narrowpeak
-*    set Sample, file("${Sample}.tag.narrow_summits.bed") into summits
-*    set Sample, file("${Sample}.tn5.broadPeak.gz") into broadpeak
-*
-*    script:
-*    """
-*    macs2 callpeak -t ${rbed} -f BED -n ${Sample}.tag.narrow -g hs --nomodel --shift -75 --extsize 150 --keep-dup all --call-summits -p 1e-3
-*    /home/asd2007/ATACseq/narrowpeak.py ${Sample}.tag.narrow_peaks.narrowPeak ${Sample}.tn5.narrowPeak 
-*
-*    macs2 callpeak -t  ${rbed} -f BED -n ${Sample}.tag.broad -g hs --nomodel --shift -75 --extsize 150 --keep-dup all --broad --broad-cutoff 0.1
-*
-*    /home/asd2007/ATACseq/broadpeak.py  ${Sample}.tag.broad_peaks.broadPeak ${Sample}.tn5.broadPeak 
-*    """
-*        }
-*
-*
-*process signalTrack {
-*    // tag "$Sample"
-*
-*    cpus 16
-*
-*        publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
-*
-*        input:
-*        set Sample, file(sbam) from bamforsignal
-*        val sz from sizefactors
-*
-*
-*        output:
-*        set Sample, file("${Sample}.sizefactors.bw") into signal
-*
-*        script:
-*        """
-*        samtools index ${sbam} &&
-*        bamCoverage --bam ${sbam} --binSize 5 \
-*            --outFileFormat bigwig --smoothLength 100 \
-*            --normalizeUsingRPKM --scaleFactor ${sz} \
-*            --maxFragmentLength 150 \
-*            -o ${Sample}.sizefactors.bw --centerReads --extendReads --numberOfProcessors ${task.cpus}
-*
-*        """
-*        }
-*/
+         }
 
 
 

@@ -220,8 +220,8 @@ PBC="$Sample.pbc.qc"
 FINAL_BAM="${Sample}.sorted.nodup.noM.black.bam"
 FINAL_BED="${Sample}.nodup.tn5.tagAlign.gz"
 
-F1="${Sample}.R1.trim.fastq.gz"
-F2="${Sample}.R2.trim.fastq.gz"
+#F1="${Sample}.R1.trim.fastq.gz"
+#F2="${Sample}.R2.trim.fastq.gz"
 ALIGNED_BAM="${Sample}.sorted.bam"
 WORKDIR=$PWD
 OUTDIR="qc"
