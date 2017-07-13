@@ -4,7 +4,14 @@
 
 p1=$1
 BLACK=$2
-NSLOTS=$3
+MYSLOTS=$3
+
+if [ -z ${NSLOTS+x}  ]
+then
+    NSLOTS=$MYSLOTS
+fi
+
+
 #BLACK="/home/asd2007/melnick_bcell_scratch/asd2007/Reference/encodeBlack.bed"
 # help
 if [ -z "$p1"  ]
@@ -28,7 +35,7 @@ export PATH="/home/asd2007/Tools/picard/build/libs:$PATH"
 
 export PATH=$JAVA_HOME/bin:$PATH
 
-alias picard="java -Xms500m -Xmx2G -jar $PICARD"
+alias picard="java -Xms500m -Xmx3G -jar $PICARD"
 
 #export PATH="/athena/elementolab/scratch/asd2007/Tools/homer/bin:$PATH"
     echo "Sorting..."
@@ -68,7 +75,7 @@ out2mb=$(echo $out1 | sed 's/\.bam$/.no.black.bam/')
 # Remove multimapping and improper reads
 
 out3=$(echo $out1 | sed 's/\.bam$/.nodup.noM.bam/')
-samtools view -F 1804 -b ${out2m} > ${out3}
+samtools view -F 1804 -f 2 -u ${out2m} > ${out3}
 samtools index $out3
 
 
@@ -77,10 +84,17 @@ out4=$(echo $out1 | sed 's/\.bam$/.nodup.noM.black.bam/')
 rmBlack.sh ${out3} ${BLACK}
 samtools index ${out4}
 
+out5=$(echo $out1 | sed 's/\.bam$/.nsorted.nodup.noM.bam/')
+
+
+sambamba sort --memory-limit 20GB -n -t ${NSLOTS} --out ${out1prefix}.nsorted.nodup.noM.bam ${out4}
+
 rm ${out2m}
 
+
+
 # histogram file
-for w in 1000 500 200
+for w in 1000 500
 do
     picard CollectInsertSizeMetrics I=$out4 O="${out4}.window${w}.hist_data" H="${out4}.window${w}.hist_graph.pdf" W=${w}
 done

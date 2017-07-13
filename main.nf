@@ -33,7 +33,6 @@ version = 1.1
 // SET PARAMS
 
 params.name = 'ecadlowpass'
-params.project = false
        //params.index = 'sampleIndex.csv'
    //params.index = 'indexpooled.tsv'
        //params.index = 'Sample_Ly7_pooled_100k'
@@ -45,8 +44,7 @@ params.blacklist = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.blac
 index = file(params.index)
 params.chrsz = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chrom.sizes"
 params.ref = "/athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
-params.name = false
-params.project = false
+params.project = 'ecadlowpass'
        //params.fasta = params.genome ? params.genomes[ params.genome ].fasta ?: false : false
        //params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
 params.notrim = false
@@ -160,7 +158,7 @@ process bwamem {
 
     executor 'sge'
     scratch true
-    clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=96:00:00 -l athena=true'
+    clusterOptions '-l h_vmem=4G -pe smp 8 -l h_rt=16:00:00 -l athena=true'
     publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
 
 
@@ -189,9 +187,10 @@ process bwamem {
 process processbam {
 
 
-    executor 'sge'
-    clusterOptions '-l h_vmem=5G -pe smp 4 -l h_rt=16:00:00 -l athena=true'
-    scratch true
+    // executor 'sge'
+        //    clusterOptions '-l h_vmem=4G -pe smp 6 -l h_rt=16:00:00 -l athena=true'
+    // scratch true
+    cpus 8
 
     publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
 
@@ -203,16 +202,22 @@ process processbam {
     set Sample, file("${Sample}.sorted.bam") into sortedbam
     set Sample, file("${Sample}.sorted.bam") into sortedbamqc
     set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into finalbam
-    set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into finalbamqc
+    set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into finalbamforqc
     file("*.pbc.qc") into pbcqc
+    file("*.dup.qc") into dupqc
     file("*nsort.fixmate.bam") into fixmatebam
     file("*window500.hist_data") into hist_data
     file("*window500.hist_graph.pdf") into fragsizes
+    set Sample, file("${Sample}.nsorted.nodup.noM.bam") into nsortedbam
+        // set Sample, file("${Sample}.sorted.nodup.noM.black.bam"), file("${Sample}.sorted.nodup.noM.black.bam.bai") into bamforsignal
+    set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into bamforsignal
+    set Sample, file("${Sample}.nsorted.nodup.noM.bam") into nsortedbamforqc
 
     script:
     """
-    #!/bin/bash -l
-    processAlignment.nf.sh ${nbam} ${BLACK} 4
+    processAlignment.nf.sh ${nbam} ${BLACK} 8
+    ##sambamba sort --memory-limit 38GB -n -t ${task.cpus} --out ${Sample}.nsorted.nodup.noM.bam ${finalbam}
+    ##samtools index ${Sample}.sorted.nodup.noM.black.bam
     """
 }
 
@@ -221,39 +226,37 @@ hist_data.subscribe { println "Received: " + file(hist_data)}
 
 fragsizes.subscribe { println "Received: " + file(fragsizes)}
 
-
-process nsortbam {
-    // tag "$Sample"
-
-        cpus 4
-        memory '20 GB'
-
-        publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
-
-        input:
-        set Sample, file(finalbam) from finalbam
-
-        output:
-        set Sample, file("${Sample}.nsorted.nodup.noM.bam") into nsortedbam
-        // set Sample, file("${Sample}.sorted.nodup.noM.black.bam"), file("${Sample}.sorted.nodup.noM.black.bam.bai") into bamforsignal
-        set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into bamforsignal
-        set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into finalbamforqc
-        set Sample, file("${Sample}.nsorted.nodup.noM.bam") into nsortedbamforqc
-            //val sf into sizefactors
-
-        script:
-            // def sf = 1
-            //def fbam = file(finalbam)
-            // finalbam.renameTo("${Sample}.sorted.nodup.noM.black.bam")
-
-        """
-        samtools index ${finalbam}
-        sambamba sort --memory-limit 18GB -n -t ${task.cpus} --out ${Sample}.nsorted.nodup.noM.bam ${finalbam}
-
-        samtools index ${Sample}.sorted.nodup.noM.black.bam
-        """
-}
-
+/*
+*process nsortbam {
+*    // tag "$Sample"
+*
+*        cpus 4
+*        memory '20 GB'
+*
+*        publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
+*
+*        input:
+*        set Sample, file(finalbam) from finalbam
+*
+*        output:
+*        set Sample, file("${Sample}.nsorted.nodup.noM.bam") into nsortedbam
+*        // set Sample, file("${Sample}.sorted.nodup.noM.black.bam"), file("${Sample}.sorted.nodup.noM.black.bam.bai") into bamforsignal
+*        set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into bamforsignal
+*        set Sample, file("${Sample}.nsorted.nodup.noM.bam") into nsortedbamforqc
+*            //val sf into sizefactors
+*
+*        script:
+*            // def sf = 1
+*            //def fbam = file(finalbam)
+*            // finalbam.renameTo("${Sample}.sorted.nodup.noM.black.bam")
+*
+*        """
+*        samtools index ${finalbam}
+*        sambamba sort --memory-limit 18GB -n -t ${task.cpus} --out ${Sample}.nsorted.nodup.noM.bam ${finalbam}
+*        samtools index ${Sample}.sorted.nodup.noM.black.bam
+*        """
+*}
+*/
 
 
 
@@ -312,10 +315,10 @@ process signalTrack {
     // tag "$Sample"
 
     publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
-    executor 'sge'
-    clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=16:00:00 -l athena=true'
-    scratch true
-
+        // executor 'sge'
+        //clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=16:00:00 -l athena=true'
+        //scratch true
+    cpus 8
 
     input:
     set Sample, file(sbam) from bamforsignal
@@ -323,16 +326,14 @@ process signalTrack {
 
 
     output:
-    set Sample, file("${Sample}.sizefactors.bw") into signal
+    set Sample, file("*.bw") into insertionTrack
 
     script:
     """
-    #!/bin/bash -l
     spack load samtools
     samtools index ${sbam}
-    bamCoverage --bam ${sbam} --binSize 20 \
-        --outFileFormat bigwig --smoothLength 120 \
-        --normalizeUsingRPKM  \
+    bamCoverage --bam ${sbam} --binSize 20 --outFileFormat bigwig --smoothLength 120 \
+        --normalizeUsingRPKM \
         --maxFragmentLength 150 \
         -o ${Sample}.sizefactors.bw --centerReads --extendReads --numberOfProcessors 8
 
@@ -375,12 +376,14 @@ process frip {
      publishDir "$results_path/$Sample/qc", mode: 'copy', overwrite: true
  
          input:
-         file(pbcqc)
-         set Sample, file(finalbamforqc) from finalbamforqc
+         file(pbc) from pbcqc
+         set Sample, file(finalbamqc) from finalbamforqc
          set Sample, file(nbamforqc) from nsortedbamforqc
          set Sample, file(broadpeaks) from broadpeakqc
          set Sample, file(finalbedqc) from finalbedqc
-         set Sample, file(sortedbamqc) from sortedbamqc
+         set Sample, file(sortbamqc) from sortedbamqc
+         file(dupqc) from dupqc
+
 
          output:
          set Sample, file("QCmetrics/raw/*") into picardraw
@@ -391,6 +394,8 @@ process frip {
 
          script:
          """
+         samtools index $finalbamqc
+         samtools index $sortbamqc
          run_ataqc.athena.nf.sh -s $Sample -g hg38
          """
 

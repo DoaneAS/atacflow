@@ -236,6 +236,11 @@ export PATH="/home/asd2007/Tools/picard/build/libs:$PATH"
 #JAVA_HOME=/home/akv3001/jdk1.8.0_05
 alias picard="java -Xms500m -Xmx6G -jar $PICARD"
 
+
+samtools index "${Sample}.sorted.bam"
+samtools index "${FINAL_BAM}"
+
+
 mkdir -p QCmetrics
 mkdir -p QCmetrics/raw
 
@@ -282,9 +287,9 @@ python "${DIR}"/run_ataqc.athena.py --workdir $PWD \
    --finalbam "${FINAL_BAM}" \
    --finalbed "${FINAL_BED}" \
    --bigwig "$Sample.smooth150.center.extend.fpkm.max150.bw" \
-   --peaks "${Sample}.tn5.pf.narrowPeak.gz" \
-   --naive_overlap_peaks "${Sample}.tn5.pf.narrowPeak.gz" \
-   --idr_peaks "${Sample}.tn5.pf.narrowPeak.gz"  --processes 4
+   --peaks "${Sample}.tn5.broadPeak.gz" \
+   --naive_overlap_peaks "${Sample}.tn5.broadPeak.gz" \
+   --idr_peaks "${Sample}.tn5.broadPeak.gz"  --processes 4
   # --naive_overlap_peaks "pseudo_reps/${Sample}.nodup.tn5.pooled.pf.pval0.1.500K.naive_overlap.narrowPeak.gz" \
   # --idr_peaks "peaks/${Sample}.tn5.pf.narrowPeak.gz"  --processes 4
 #"IDR/${Sample}.IDR.txt.IDR0.1.filt.narrowPeak.gz" \
