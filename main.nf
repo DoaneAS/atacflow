@@ -55,8 +55,34 @@ params.broad = false
 params.outdir = './results'
 params.email = 'ashley.doane@gmail.com'
 params.chromsizes = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chrom.sizes"
-       params.lncaprefpeak = "$baseDir/data/lncapPeak.narrowPeak" 
-       params.bcellrefpeak = "$baseDir/data/gcb.tn5.broadPeak" 
+params.lncaprefpeak = "$baseDir/data/lncapPeak.narrowPeak" 
+params.bcellrefpeak = "$baseDir/data/gcb.tn5.broadPeak" 
+
+params.DNASE_BED="/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/reg2map_honeybadger2_dnase_all_p10_ucsc.bed.gz"
+params.BLACK="/athena/elementolab/scratch/asd2007/reference/hg38/hg38.blacklist.bed.gz"
+params.PICARDCONF="/athena/elementolab/scratch/asd2007/reference/hg38/picardmetrics.conf"
+params.REF="/athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
+params.REFbt2="/athena/elementolab/scratch/asd2007/reference/hg38/bowtie2_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
+params.bwt2_idx="/athena/elementolab/scratch/asd2007/reference/hg38/bowtie2_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
+params.RG="hg38"
+params.SPEC="hs"
+params.REFGen="/athena/elementolab/scratch/asd2007/reference/hg38/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
+params.seq="/athena/elementolab/scratch/asd2007/reference/hg38/seq"
+params.gensz="hs"
+params.bwt2_idx="/athena/elementolab/scratch/asd2007/reference/hg38/bowtie2_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
+params.REF_FASTA="/athena/elementolab/scratch/asd2007/reference/hg38/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
+params.species_browser='hg38'
+params.TSS_ENRICH="/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/hg38_gencode_tss_unique.bed.gz"
+params.DNASE='/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/reg2map_honeybadger2_dnase_all_p10_ucsc.hg19_to_hg38.bed.gz'
+params.PROM='/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/reg2map_honeybadger2_dnase_prom_p2.hg19_to_hg38.bed.gz'
+params.ENH='athena/elementolab/scratch/asd2007/reference/hg38/ataqc/reg2map_honeybadger2_dnase_enh_p2.hg19_to_hg38.bed.gz'
+params.REG2MAP='/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/hg38_dnase_avg_fseq_signal_formatted.txt.gz'
+params.REG2MAP_BED="/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/hg38_celltype_compare_subsample.bed.gz"
+params.ROADMAP_META="/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/hg38_dnase_avg_fseq_signal_metadata.txt"
+
+
+
+
 
 custom_runName = params.name
 if( !(workflow.runName ==~ /[a-z]+_[a-z]+/) ){
@@ -370,8 +396,33 @@ process frip {
 
 
 
+
+
+process picardqc {
+
+    publishDir "$results_path/$Sample/qc", mode: 'copy', overwrite: true
+
+    input:
+    set Sample, file(sortbamqc) from sortedbamqc
+
+
+    output:
+    set Sample, file("QCmetrics/${Sample}.picardcomplexity.qc") into picardcomplexity
+    set Sample, file(sortbamqc) into sortbamqc
+
+    script:
+    """
+    mkdir -p QCmetrics
+    picardmetrics run -f $PICARDCONF -o QCmetrics $sortbamqc
+    cp QCmetrics/*.EstimateLibraryComplexity.log QCmetrics/${Sample}.picardcomplexity.qc
+    """
+
+}
+
+
+
  
- process atacqc {
+process atacqc {
  
      publishDir "$results_path/$Sample/qc", mode: 'copy', overwrite: true
  
@@ -381,14 +432,13 @@ process frip {
          set Sample, file(nbamforqc) from nsortedbamforqc
          set Sample, file(broadpeaks) from broadpeakqc
          set Sample, file(finalbedqc) from finalbedqc
-         set Sample, file(sortbamqc) from sortedbamqc
+         set Sample, file(sortbamqc) from sortbamqc
+         set Sample, file(insertioTrack) from insertionTrack
          file(dupqc) from dupqc
 
 
          output:
-         set Sample, file("QCmetrics/raw/*") into picardraw
-         set Sample, file("QCmetrics/*.picardcomplexity.qc") into picardcomplexity
-         set Sample, file("*.preseq.dat"), file("*_qc.txt"), file("*large_vplot.png"), file("*vplot.png") into qcdat1
+         set Sample, file("$Sample*.preseq.dat"), file("$Sample*_qc.txt"), file("$Sample*large_vplot.png"), file("$Sample*vplot.png") into qcdat1
          set Sample, file("*.log"), file("*qc") into logs
 
 
@@ -396,7 +446,28 @@ process frip {
          """
          samtools index $finalbamqc
          samtools index $sortbamqc
-         run_ataqc.athena.nf.sh -s $Sample -g hg38
+         python run_ataqc.athena.py --workdir \${PWD} \
+             --outdir qc \
+             --outprefix ${Sample} \
+             --genome \${GENOME} \
+             --ref \${REF} --tss \$TSS_ENRICH \
+             --dnase \${DNASE} \
+             --blacklist ${BLACK} \
+             --prom \$PROM \
+             --enh \${ENH} \
+            --reg2map \${REG2MAP} \
+            --meta \${ROADMAP_META} \
+            --alignedbam $sortbamqc  \
+            --coordsortbam $sortbamqc \
+            --duplog $dupqc \
+            --pbc $pbc \
+            --finalbam $finalbamqc \
+            --finalbed $finalbedqc \
+            --bigwig $insertionTrack \
+            --peaks $broadpeaks \
+            --naive_overlap_peaks $broadpeaks \
+            --idr_peaks $broadpeaks --processes 4
+
          """
 
          }

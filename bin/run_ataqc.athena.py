@@ -634,11 +634,7 @@ def get_insert_distribution(final_bam, prefix):
     insert_plot = '{0}.inserts.hist_graph.pdf'.format(prefix)
     graph_insert_dist = ('picard '
                          'CollectInsertSizeMetrics '
-                         'INPUT={0} OUTPUT={1} H={2} '
-                         'VERBOSITY=ERROR QUIET=TRUE '
-                         'W=1000 STOP_AFTER=5000000').format(final_bam,
-                                                             insert_data,
-                                                             insert_plot)
+                         'INPUT={0} OUTPUT={1} H={2} ').format(final_bam, insert_data, insert_plot)
     logging.info(graph_insert_dist)
     os.system(graph_insert_dist)
     return insert_data, insert_plot

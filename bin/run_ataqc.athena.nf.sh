@@ -286,7 +286,7 @@ python "${DIR}"/run_ataqc.athena.py --workdir $PWD \
    --pbc "${Sample}.pbc.qc" \
    --finalbam "${FINAL_BAM}" \
    --finalbed "${FINAL_BED}" \
-   --bigwig "$Sample.smooth150.center.extend.fpkm.max150.bw" \
+   --bigwig "$Sample.sizefactors.bw" \
    --peaks "${Sample}.tn5.broadPeak.gz" \
    --naive_overlap_peaks "${Sample}.tn5.broadPeak.gz" \
    --idr_peaks "${Sample}.tn5.broadPeak.gz"  --processes 4
