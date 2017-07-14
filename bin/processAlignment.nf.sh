@@ -25,6 +25,9 @@ fi
 
 
 spack load jdk
+spack load samtools
+spack load bedtools2
+spack load r
 
 #export R_JAVA_LD_LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server
 #export PATH="/home/asd2007/Tools/bedtools2/bin:$PATH"

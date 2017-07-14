@@ -32,11 +32,12 @@ version = 1.1
 
 // SET PARAMS
 
-params.name = 'ecadlowpass'
+params.name = 'ecadd4547'
        //params.index = 'sampleIndex.csv'
    //params.index = 'indexpooled.tsv'
        //params.index = 'Sample_Ly7_pooled_100k'
-params.index = "$baseDir/indexTest.csv"
+params.index = "$baseDir/indexecad.csv"
+       //params.index = "$baseDir/indexTest.csv"
        //params.index = 'sampleIndexjc.csv'
 params.genome = 'hg38'
 params.blacklist = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.blacklist.bed.gz"
@@ -151,6 +152,9 @@ sizefactors = Channel.from(1)
 
 
 
+bcellrefpeaks = Channel.fromPath(params.bcellrefpeak)
+
+lncaprefpeaks = Channel.fromPath(params.lncaprefpeak)
 
 fastq = Channel
        .from(index.readLines())
@@ -165,26 +169,13 @@ fastq = Channel
               def message = '[INFO] '
               log.info message
               [ Sample, path, reads ]
-    }
-
-bcellrefpeaks = Channel.fromPath(params.bcellrefpeak)
-
-lncaprefpeaks = Channel.fromPath(params.lncaprefpeak)
-
-//    Channel
-//       .fromFilePairs( params.reads )                                             
-//       .ifEmpty { error "Cannot find any reads matching: ${params.reads}" }
-//        .set { read_pairs }
-
-
-
+}
 
 
 process bwamem {
-
     executor 'sge'
     scratch true
-    clusterOptions '-l h_vmem=4G -pe smp 8 -l h_rt=16:00:00 -l athena=true'
+    clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=26:00:00 -l athena=true'
     publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
 
 
@@ -200,10 +191,9 @@ process bwamem {
     #!/bin/bash -l
     set -o pipefail
     spack load bwa
-    bwa mem -t 8 -M /athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta $reads | samtools view -bS - > ${Sample}.bam
+    bwa mem -t 8 -M /athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta $reads | samtools view -bS -q 30 - > ${Sample}.bam
     """
-
-    }
+}
 
 
 
@@ -213,10 +203,10 @@ process bwamem {
 process processbam {
 
 
-    // executor 'sge'
-        //    clusterOptions '-l h_vmem=4G -pe smp 6 -l h_rt=16:00:00 -l athena=true'
-    // scratch true
-    cpus 8
+    executor 'sge'
+    clusterOptions '-l h_vmem=4G -pe smp 8 -l h_rt=16:00:00 -l athena=true'
+    scratch true
+    // cpus 8
 
     publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
 
@@ -229,6 +219,7 @@ process processbam {
     set Sample, file("${Sample}.sorted.bam") into sortedbamqc
     set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into finalbam
     set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into finalbamforqc
+    set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into bamforsignal
     file("*.pbc.qc") into pbcqc
     file("*.dup.qc") into dupqc
     file("*nsort.fixmate.bam") into fixmatebam
@@ -236,14 +227,14 @@ process processbam {
     file("*window500.hist_graph.pdf") into fragsizes
     set Sample, file("${Sample}.nsorted.nodup.noM.bam") into nsortedbam
         // set Sample, file("${Sample}.sorted.nodup.noM.black.bam"), file("${Sample}.sorted.nodup.noM.black.bam.bai") into bamforsignal
-    set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into bamforsignal
     set Sample, file("${Sample}.nsorted.nodup.noM.bam") into nsortedbamforqc
 
     script:
     """
+    #!/bin/bash -l
+    set -o pipefail
+    spack load jdk
     processAlignment.nf.sh ${nbam} ${BLACK} 8
-    ##sambamba sort --memory-limit 38GB -n -t ${task.cpus} --out ${Sample}.nsorted.nodup.noM.bam ${finalbam}
-    ##samtools index ${Sample}.sorted.nodup.noM.black.bam
     """
 }
 
@@ -251,39 +242,6 @@ process processbam {
 hist_data.subscribe { println "Received: " + file(hist_data)}
 
 fragsizes.subscribe { println "Received: " + file(fragsizes)}
-
-/*
-*process nsortbam {
-*    // tag "$Sample"
-*
-*        cpus 4
-*        memory '20 GB'
-*
-*        publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
-*
-*        input:
-*        set Sample, file(finalbam) from finalbam
-*
-*        output:
-*        set Sample, file("${Sample}.nsorted.nodup.noM.bam") into nsortedbam
-*        // set Sample, file("${Sample}.sorted.nodup.noM.black.bam"), file("${Sample}.sorted.nodup.noM.black.bam.bai") into bamforsignal
-*        set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into bamforsignal
-*        set Sample, file("${Sample}.nsorted.nodup.noM.bam") into nsortedbamforqc
-*            //val sf into sizefactors
-*
-*        script:
-*            // def sf = 1
-*            //def fbam = file(finalbam)
-*            // finalbam.renameTo("${Sample}.sorted.nodup.noM.black.bam")
-*
-*        """
-*        samtools index ${finalbam}
-*        sambamba sort --memory-limit 18GB -n -t ${task.cpus} --out ${Sample}.nsorted.nodup.noM.bam ${finalbam}
-*        samtools index ${Sample}.sorted.nodup.noM.black.bam
-*        """
-*}
-*/
-
 
 
 
@@ -342,8 +300,8 @@ process signalTrack {
 
     publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
         // executor 'sge'
-        //clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=16:00:00 -l athena=true'
-        //scratch true
+        // clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=26:00:00 -l athena=true'
+        //    scratch true
     cpus 8
 
     input:
@@ -352,16 +310,12 @@ process signalTrack {
 
 
     output:
-    set Sample, file("*.bw") into insertionTrack
+    set Sample, file("${Sample}.sizefactors.bw") into insertionTrackbw
 
     script:
     """
-    spack load samtools
-    samtools index ${sbam}
-    bamCoverage --bam ${sbam} --binSize 20 --outFileFormat bigwig --smoothLength 120 \
-        --normalizeUsingRPKM \
-        --maxFragmentLength 150 \
-        -o ${Sample}.sizefactors.bw --centerReads --extendReads --numberOfProcessors 8
+    #!/bin/bash -l
+    getbamcov.sh ${sbam} ${Sample}
 
     """
     }
@@ -373,26 +327,26 @@ process frip {
 
     publishDir "$results_path/$Sample/qc", mode: 'copy', overwrite: true
 
-        input:
-        set sname, file(bed) from finalbedpe
-        set Sample, file(peaks) from broadpeak
-        file(lncapref) from lncaprefpeaks
-        file(bcellref) from bcellrefpeaks
+    input:
+    set sname, file(bed) from finalbedpe
+    set Sample, file(peaks) from broadpeak
+    file(lncapref) from lncaprefpeaks
+    file(bcellref) from bcellrefpeaks
 
-        output:
-        set sname, file("${sname}.frip.txt") into frips
-        set sname, file("${sname}.lncapref.frip.txt") into frips2
-        set sname, file("${sname}.bcellref.frip.txt") into frips3
+    output:
+    set sname, file("${sname}.frip.txt") into frips
+    set sname, file("${sname}.lncapref.frip.txt") into frips2
+    set sname, file("${sname}.bcellref.frip.txt") into frips3
 
-        script:
+    script:
+    """
+    getFripQC.py --bed ${bed} --peaks ${peaks} --out ${sname}.frip.txt
+
+    getFripQC.py --bed ${bed} --peaks ${lncapref} --out ${sname}.lncapref.frip.txt
+
+    getFripQC.py --bed ${bed} --peaks ${bcellref} --out ${sname}.bcellref.frip.txt
         """
-        getFripQC.py --bed ${bed} --peaks ${peaks} --out ${sname}.frip.txt
-
-        getFripQC.py --bed ${bed} --peaks ${lncapref} --out ${sname}.lncapref.frip.txt
-
-        getFripQC.py --bed ${bed} --peaks ${bcellref} --out ${sname}.bcellref.frip.txt
-        """
-        }
+}
 
 
 
@@ -423,54 +377,34 @@ process picardqc {
 
  
 process atacqc {
+    publishDir "$results_path/$Sample/qc", mode: 'copy', overwrite: true
  
-     publishDir "$results_path/$Sample/qc", mode: 'copy', overwrite: true
- 
-         input:
-         file(pbc) from pbcqc
-         set Sample, file(finalbamqc) from finalbamforqc
-         set Sample, file(nbamforqc) from nsortedbamforqc
-         set Sample, file(broadpeaks) from broadpeakqc
-         set Sample, file(finalbedqc) from finalbedqc
-         set Sample, file(sortbamqc) from sortbamqc
-         set Sample, file(insertioTrack) from insertionTrack
-         file(dupqc) from dupqc
+    input:
+    file(pbc) from pbcqc
+    set Sample, file(finalbamqc) from finalbamforqc
+    set Sample, file(nbamforqc) from nsortedbamforqc
+    set Sample, file(broadpeaks) from broadpeakqc
+    set Sample, file(finalbedqc) from finalbedqc
+    set Sample, file(sortbamqc) from sortbamqc
+    set Sample, file(insertioTrackbw) from insertionTrackbw
+    file(dupqc) from dupqc
+
+    output:
+    set Sample, file("${Sample}*.preseq.dat"), file("${Sample}*_qc.txt"), file("${Sample}*large_vplot.png"), file("${Sample}*vplot.png") into qcdat1
+    set Sample, file("*.log"), file("*qc"), file("qc/*") into logs
 
 
-         output:
-         set Sample, file("$Sample*.preseq.dat"), file("$Sample*_qc.txt"), file("$Sample*large_vplot.png"), file("$Sample*vplot.png") into qcdat1
-         set Sample, file("*.log"), file("*qc") into logs
+    script:
+    """
+    spack load jdk
+    spack load samtools
+    samtools index ${finalbamqc}
+    samtools index ${sortbamqc}
+    run_ataqc.athena.py --outprefix ${Sample} --alignedbam ${sortbamqc} --coordsortbam ${sortbamqc} \
+    --duplog ${dupqc} --pbc ${pbc} --finalbam ${finalbamqc} --finalbed ${finalbedqc} --bigwig ${insertionTrackbw} --peaks ${broadpeaks} --naive_overlap_peaks ${broadpeaks} --idr_peaks ${broadpeaks} --processes 4
 
-
-         script:
-         """
-         samtools index $finalbamqc
-         samtools index $sortbamqc
-         python run_ataqc.athena.py --workdir \${PWD} \
-             --outdir qc \
-             --outprefix ${Sample} \
-             --genome \${GENOME} \
-             --ref \${REF} --tss \$TSS_ENRICH \
-             --dnase \${DNASE} \
-             --blacklist ${BLACK} \
-             --prom \$PROM \
-             --enh \${ENH} \
-            --reg2map \${REG2MAP} \
-            --meta \${ROADMAP_META} \
-            --alignedbam $sortbamqc  \
-            --coordsortbam $sortbamqc \
-            --duplog $dupqc \
-            --pbc $pbc \
-            --finalbam $finalbamqc \
-            --finalbed $finalbedqc \
-            --bigwig $insertionTrack \
-            --peaks $broadpeaks \
-            --naive_overlap_peaks $broadpeaks \
-            --idr_peaks $broadpeaks --processes 4
-
-         """
-
-         }
+    """
+}
 
 
 
