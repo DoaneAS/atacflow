@@ -1159,16 +1159,6 @@ fragment length distribution and will show specific peak ratios.
 
   <h3>IDR peak file statistics</h3>
 
-  <table class='qc_table'>
-    <tbody>
-      {% for field, value in sample['idr_peak_summ'].iteritems() %}
-      <tr>
-        <td>{{ field }}</td>
-        <td>{{ value }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
 
   {{ inline_img(sample['idr_peak_dist']) }}
 
@@ -1474,7 +1464,7 @@ def main():
     peak_counts = get_peak_counts(PEAKS, NAIVE_OVERLAP_PEAKS, IDR_PEAKS)
     raw_peak_summ, raw_peak_dist = get_region_size_metrics(PEAKS)
     naive_peak_summ, naive_peak_dist = get_region_size_metrics(NAIVE_OVERLAP_PEAKS)
-    idr_peak_summ, idr_peak_dist = get_region_size_metrics(IDR_PEAKS)
+    #idr_peak_summ, idr_peak_dist = get_region_size_metrics(IDR_PEAKS)
    
 
     # Compare to roadmap

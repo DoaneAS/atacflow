@@ -248,7 +248,7 @@ mkdir -p QCmetrics/raw
 if [ -f ${Sample}.picardcomplexity.qc ]; then
     echo "found picarmetrics file"
 else
-    picardmetrics run -f $PICARDCONF -o QCmetrics/raw ${Sample}.sorted.bam
+#    picardmetrics run -f $PICARDCONF -o QCmetrics/raw ${Sample}.sorted.bam
     cp QCmetrics/raw/*.EstimateLibraryComplexity.log QCmetrics/${Sample}.picardcomplexity.qc
     cp QCmetrics/raw/*.EstimateLibraryComplexity.log ${Sample}.picardcomplexity.qc
 fi;
