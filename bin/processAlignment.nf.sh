@@ -45,7 +45,7 @@ alias picard="java -Xms500m -Xmx3G -jar $PICARD"
     out1prefix=$(echo $p1 | sed 's/\.bam$//')
     out1="${out1prefix}.sorted.bam"
     echo ${out1}
-    samtools view -u -q 30 $p1 | sambamba sort --memory-limit 20GB \
+    samtools view -u -@ ${NSLOTS} -q 30 $p1 | sambamba sort --memory-limit 32GB \
              --nthreads ${NSLOTS} --tmpdir ${TMPDIR} /dev/stdin --out ${out1}
     samtools index $out1
     # echo "aligning : $TMPDIR/${Sample}.R1.trim.fq ,  $TMPDIR/${Sample}.R2.trim.fq using bwa-mem.."
@@ -78,7 +78,7 @@ out2mb=$(echo $out1 | sed 's/\.bam$/.no.black.bam/')
 # Remove multimapping and improper reads
 
 out3=$(echo $out1 | sed 's/\.bam$/.nodup.noM.bam/')
-samtools view -F 1804 -f 2 -u ${out2m} > ${out3}
+samtools view -@ 6 -F 1804 -f 2 -u ${out2m} > ${out3}
 samtools index $out3
 
 
@@ -90,7 +90,7 @@ samtools index ${out4}
 out5=$(echo $out1 | sed 's/\.bam$/.nsorted.nodup.noM.bam/')
 
 
-sambamba sort --memory-limit 20GB -n -t ${NSLOTS} --out ${out1prefix}.nsorted.nodup.noM.bam ${out4}
+sambamba sort --memory-limit 32GB -n -t ${NSLOTS} --out ${out1prefix}.nsorted.nodup.noM.bam ${out4}
 
 rm ${out2m}
 
@@ -109,7 +109,7 @@ done
 
 echo "Namesort ..."
 
-sambamba sort --n --memory-limit 20GB \
+sambamba sort -n -u --memory-limit 32GB \
          --nthreads ${NSLOTS} --tmpdir ${TMPDIR} --out ${out1prefix}.nsort.bam $p1
 
 #samtools sort -n $p1 -o ${out1prefix}.nsort.bam
@@ -120,7 +120,7 @@ sambamba sort --n --memory-limit 20GB \
 samtools fixmate -r ${out1prefix}.nsort.bam ${out1prefix}.nsort.fixmate.bam
 #samtools view -F 1804 -f 2 -u  ${out1prefix}.nsort.fixmate.bam | samtools sort - > ${out1prefix}.filt.srt.bam
 
-samtools view -F 1804 -f 2 -u  ${out1prefix}.nsort.fixmate.bam | sambamba sort --memory-limit 20GB \
+samtools view -F 1804 -f 2 -u  ${out1prefix}.nsort.fixmate.bam | sambamba sort --memory-limit 32GB \
                                                                           --nthreads ${NSLOTS} --tmpdir ${TMPDIR} /dev/stdin --out ${out1prefix}.filt.srt.bam
 
 #alias picard="java -Xms500m -Xmx5G -jar $PICARD"
@@ -130,7 +130,7 @@ picard  MarkDuplicates VERBOSITY=ERROR QUIET=TRUE\
 
 #samtools sort -n ${out1prefix}.dupmark.bam -o ${out1prefix}.srt.tmp.bam
 
-sambamba sort --n --memory-limit 20GB \
+sambamba sort --n --memory-limit 32GB \
          --nthreads ${NSLOTS} --tmpdir ${TMPDIR} --out ${out1prefix}.srt.tmp.bam  ${out1prefix}.dupmark.bam
 
 dupmark_bam="${out1prefix}.srt.tmp.bam"

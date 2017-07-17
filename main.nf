@@ -400,9 +400,7 @@ process atacqc {
     spack load samtools
     samtools index ${finalbamqc}
     samtools index ${sortbamqc}
-    run_ataqc.athena.py --outprefix ${Sample} --alignedbam ${sortbamqc} --coordsortbam ${sortbamqc} \
-    --duplog ${dupqc} --pbc ${pbc} --finalbam ${finalbamqc} --finalbed ${finalbedqc} --bigwig ${insertionTrackbw} --peaks ${broadpeaks} --naive_overlap_peaks ${broadpeaks} --idr_peaks ${broadpeaks} --processes 4
-
+    run_ataqc.athena.nf.sh -s ${Sample} -g hg38
     """
 }
 
