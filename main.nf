@@ -36,9 +36,9 @@ params.name = 'ecadd4547'
        //params.index = 'sampleIndex.csv'
    //params.index = 'indexpooled.tsv'
        //params.index = 'Sample_Ly7_pooled_100k'
-params.index = "$baseDir/indexecad.csv"
+       //params.index = "$baseDir/indexecad.csv"
        //params.index = "$baseDir/indexTest.csv"
-       //params.index = 'sampleIndexjc.csv'
+params.index = 'sampleIndexjc.csv'
 params.genome = 'hg38'
 params.blacklist = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.blacklist.bed.gz"
        //genome = file(params.genome)
@@ -299,10 +299,10 @@ process signalTrack {
     // tag "$Sample"
 
     publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
-        // executor 'sge'
-        // clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=26:00:00 -l athena=true'
-        //    scratch true
-    cpus 8
+    executor 'sge'
+    clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=10:00:00 -l athena=true'
+    scratch true
+        //cpus 4
 
     input:
     set Sample, file(sbam) from bamforsignal
@@ -376,7 +376,7 @@ process picardqc {
 
 
  
-process atacqc {
+process ataqc {
     publishDir "$results_path/$Sample/qc", mode: 'copy', overwrite: true
  
     input:
@@ -386,7 +386,7 @@ process atacqc {
     set Sample, file(broadpeaks) from broadpeakqc
     set Sample, file(finalbedqc) from finalbedqc
     set Sample, file(sortbamqc) from sortbamqc
-    set Sample, file(insertioTrackbw) from insertionTrackbw
+    set Sample, file(insertionTrackbw) from insertionTrackbw
     file(dupqc) from dupqc
 
     output:
