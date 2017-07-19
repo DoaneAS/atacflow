@@ -202,13 +202,12 @@ process bwamem {
 
 process processbam {
 
-
+    publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
     executor 'sge'
     clusterOptions '-l h_vmem=4G -pe smp 8 -l h_rt=16:00:00 -l athena=true'
     scratch true
     // cpus 8
 
-    publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
 
     input:
     set Sample, file(nbam) from newbam
@@ -239,9 +238,9 @@ process processbam {
 }
 
 
-hist_data.subscribe { println "Received: " + file(hist_data)}
+//hist_data.subscribe { println "Received: " + file(hist_data)}
 
-fragsizes.subscribe { println "Received: " + file(fragsizes)}
+//fragsizes.subscribe { println "Received: " + file(fragsizes)}
 
 
 
@@ -390,8 +389,9 @@ process ataqc {
     file(dupqc) from dupqc
 
     output:
-    set Sample, file("${Sample}*.preseq.dat"), file("${Sample}*_qc.txt"), file("${Sample}*large_vplot.png"), file("${Sample}*vplot.png") into qcdat1
-    set Sample, file("*.log"), file("*qc"), file("qc/*") into logs
+    set Sample, file("${Sample}*.preseq.log"), file("${Sample}*_qc.txt"), file("${Sample}*large_vplot.png"), file("${Sample}*vplot.png") into qcdat1
+        set Sample, file("${Sample}_qc.trad.txt"), file("${Sample}*qc.html"), file("*qc.save") into qcdat2
+    set Sample, file("*.log"), file("*qc") into logs
 
 
     script:
