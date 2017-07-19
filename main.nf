@@ -173,10 +173,11 @@ fastq = Channel
 
 
 process bwamem {
+
+    publishDir "$results_path/$Sample/$Sample", mode: 'copy'
     executor 'sge'
     scratch true
     clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=26:00:00 -l athena=true'
-    publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
 
 
     input:
@@ -202,7 +203,8 @@ process bwamem {
 
 process processbam {
 
-    publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
+    publishDir "$results_path/$Sample/$Sample", mode: 'copy'
+
     executor 'sge'
     clusterOptions '-l h_vmem=4G -pe smp 8 -l h_rt=16:00:00 -l athena=true'
     scratch true
@@ -246,7 +248,7 @@ process processbam {
 
 process bam2bed {
 
-    publishDir  "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
+    publishDir  "$results_path/$Sample/$Sample", mode: 'copy'
 
     input:
     set Sample, file(nsbam) from nsortedbam
@@ -271,7 +273,7 @@ process bam2bed {
 
 process callpeaks {
 
-    publishDir  "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
+    publishDir  "$results_path/$Sample/$Sample", mode: 'copy'
 
     input:
     set Sample, file(rbed) from finalbed
@@ -297,7 +299,8 @@ process callpeaks {
 process signalTrack {
     // tag "$Sample"
 
-    publishDir "$results_path/$Sample/$Sample", mode: 'copy', overwrite: false
+    publishDir "$results_path/$Sample/$Sample", mode: 'copy'
+
     executor 'sge'
     clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=10:00:00 -l athena=true'
     scratch true
@@ -324,7 +327,7 @@ process signalTrack {
 
 process frip {
 
-    publishDir "$results_path/$Sample/qc", mode: 'copy', overwrite: true
+    publishDir "$results_path/$Sample/qc", mode: 'copy'
 
     input:
     set sname, file(bed) from finalbedpe
@@ -353,7 +356,7 @@ process frip {
 
 process picardqc {
 
-    publishDir "$results_path/$Sample/qc", mode: 'copy', overwrite: true
+    publishDir "$results_path/$Sample/qc", mode: 'copy'
 
     input:
     set Sample, file(sortbamqc) from sortedbamqc
@@ -376,7 +379,7 @@ process picardqc {
 
  
 process ataqc {
-    publishDir "$results_path/$Sample/qc", mode: 'copy', overwrite: true
+    publishDir "$results_path/$Sample/qc", mode: 'copy'
  
     input:
     file(pbc) from pbcqc
