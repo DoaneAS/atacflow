@@ -37,8 +37,8 @@ params.name = 'ecadd4547'
    //params.index = 'indexpooled.tsv'
        //params.index = 'Sample_Ly7_pooled_100k'
        //params.index = "$baseDir/indexecad.csv"
-       //params.index = "$baseDir/indexTest.csv"
-params.index = 'sampleIndexjc.csv'
+params.index = "$baseDir/indexTest.csv"
+       //params.index = 'sampleIndexjc.csv'
 params.genome = 'hg38'
 params.blacklist = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.blacklist.bed.gz"
        //genome = file(params.genome)
@@ -302,10 +302,10 @@ process signalTrack {
 
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
-    executor 'sge'
-    clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=10:00:00 -l athena=true'
-    scratch true
-        //cpus 4
+        // executor 'sge'
+        // clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=10:00:00 -l athena=true'
+        // scratch true
+     cpus 12
 
     input:
     set Sample, file(sbam) from bamforsignal
@@ -317,7 +317,6 @@ process signalTrack {
 
     script:
     """
-    #!/bin/bash -l
     getbamcov.sh ${sbam} ${Sample}
 
     """
@@ -370,7 +369,7 @@ process picardqc {
     script:
     """
     mkdir -p QCmetrics
-    picardmetrics run -f $PICARDCONF -o QCmetrics $sortbamqc
+    picardmetrics run -f \$PICARDCONF -o QCmetrics $sortbamqc
     cp QCmetrics/*.EstimateLibraryComplexity.log QCmetrics/${Sample}.picardcomplexity.qc
     """
 

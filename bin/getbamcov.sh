@@ -1,4 +1,3 @@
-#!/bin/bash -l
 sbam=$1
 outprefix=$2
 
@@ -10,4 +9,4 @@ samtools index ${sbam}
 bamCoverage --bam ${sbam} --binSize 20 --outFileFormat bigwig --smoothLength 120 \
             --normalizeUsingRPKM \
             --maxFragmentLength 150 \
-            -o ${outprefix}.sizefactors.bw --centerReads --extendReads --numberOfProcessors 8
+            -o ${outprefix}.sizefactors.bw --centerReads --extendReads --numberOfProcessors 12
