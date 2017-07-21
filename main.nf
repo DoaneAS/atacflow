@@ -173,8 +173,9 @@ fastq = Channel
 
 
 process bwamem {
-
+    tag "$Sample"
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
+
     executor 'sge'
     scratch true
     clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=26:00:00 -l athena=true'
@@ -202,7 +203,7 @@ process bwamem {
 
 
 process processbam {
-
+    tag "$Sample"
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
     executor 'sge'
@@ -247,7 +248,7 @@ process processbam {
 
 
 process bam2bed {
-
+    tag "$Sample"
     publishDir  "$results_path/$Sample/$Sample", mode: 'copy'
 
     input:
@@ -272,7 +273,7 @@ process bam2bed {
 
 
 process callpeaks {
-
+    tag "$Sample"
     publishDir  "$results_path/$Sample/$Sample", mode: 'copy'
 
     input:
@@ -297,7 +298,7 @@ process callpeaks {
 
 
 process signalTrack {
-    // tag "$Sample"
+    tag "$Sample"
 
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
@@ -326,7 +327,7 @@ process signalTrack {
 
 
 process frip {
-
+    tag "$Sample"
     publishDir "$results_path/$Sample/qc", mode: 'copy'
 
     input:
@@ -355,7 +356,7 @@ process frip {
 
 
 process picardqc {
-
+    tag "$Sample"
     publishDir "$results_path/$Sample/qc", mode: 'copy'
 
     input:
@@ -379,6 +380,7 @@ process picardqc {
 
  
 process ataqc {
+    tag "$Sample"
     publishDir "$results_path/$Sample/qc", mode: 'copy'
  
     input:
@@ -393,7 +395,7 @@ process ataqc {
 
     output:
     set Sample, file("${Sample}*.preseq.log"), file("${Sample}*_qc.txt"), file("${Sample}*large_vplot.png"), file("${Sample}*vplot.png") into qcdat1
-        set Sample, file("${Sample}_qc.trad.txt"), file("${Sample}*qc.html"), file("*qc.save") into qcdat2
+    set Sample, file("${Sample}_qc.trad.txt"), file("${Sample}*qc.html"), file("*qc.save") into qcdat2
     set Sample, file("*.log"), file("*qc") into logs
 
 
