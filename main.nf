@@ -33,11 +33,11 @@ version = 1.1
 // SET PARAMS
 
 params.name = 'ecadd4547'
-       //params.index = 'sampleIndex.csv'
+params.index = 'sampleIndex.csv'
    //params.index = 'indexpooled.tsv'
        //params.index = 'Sample_Ly7_pooled_100k'
        //params.index = "$baseDir/indexecad.csv"
-params.index = "$baseDir/indexTest.csv"
+//params.index = "$baseDir/indexTest.csv"
        //params.index = 'sampleIndexjc.csv'
 params.genome = 'hg38'
 params.blacklist = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.blacklist.bed.gz"
@@ -222,8 +222,8 @@ process processbam {
     set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into finalbam
     set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into finalbamforqc
     set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into bamforsignal
-    file("*.pbc.qc") into pbcqc
-    file("*.dup.qc") into dupqc
+    set Sample, file("${Sample}*.pbc.qc") into pbcqc
+    set Sample, file("${Sample}*.dup.qc") into dupqc
     file("*nsort.fixmate.bam") into fixmatebam
     file("*window500.hist_data") into hist_data
     file("*window500.hist_graph.pdf") into fragsizes
@@ -376,37 +376,47 @@ process picardqc {
 }
 
 
+finalbamforqc.mix(nsortedbamforqc)
+    .mix(broadpeakqc)
+    .mix(finalbedqc)
+    .mix(sortbamqc)
+    .mix(insertionTrackbw)
+    .mix(picardcomplexity)
+    .mix(pbcqc)
+    .mix(dupqc)
+    .groupTuple(sort: true)
+    .view()
+    .set{ qcin }
 
- 
-process ataqc {
+
+process atacqc {
     tag "$Sample"
+
     publishDir "$results_path/$Sample/qc", mode: 'copy'
- 
+
     input:
-    file(pbc) from pbcqc
-    set Sample, file(finalbamqc) from finalbamforqc
-    set Sample, file(nbamforqc) from nsortedbamforqc
-    set Sample, file(broadpeaks) from broadpeakqc
-    set Sample, file(finalbedqc) from finalbedqc
-    set Sample, file(sortbamqc) from sortbamqc
-    set Sample, file(insertionTrackbw) from insertionTrackbw
-    file(dupqc) from dupqc
+    set Sample, file(file_list) from qcin
 
     output:
-    set Sample, file("${Sample}*.preseq.log"), file("${Sample}*_qc.txt"), file("${Sample}*large_vplot.png"), file("${Sample}*vplot.png") into qcdat1
-    set Sample, file("${Sample}_qc.trad.txt"), file("${Sample}*qc.html"), file("*qc.save") into qcdat2
+    set Sample, file("${Sample}*.preseq.log"), file("${Sample}*_qc.txt"), file("${Sample}*large_vplot.png"), file("${Sample}*vplot.png"), file("${Sample}_qc.trad.txt"), file("${Sample}*qc.html"), file("*qc.save") into qcdat
     set Sample, file("*.log"), file("*qc") into logs
 
 
     script:
     """
+
+    echo ${Sample} ${file_list}
     spack load jdk
     spack load samtools
-    samtools index ${finalbamqc}
-    samtools index ${sortbamqc}
+    samtools index ${Sample}.sorted.nodup.noM.black.bam
+    samtools index ${Sample}.sorted.bam
     run_ataqc.athena.nf.sh -s ${Sample} -g hg38
     """
+
 }
+
+
+
 
 
 
