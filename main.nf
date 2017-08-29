@@ -178,7 +178,7 @@ process bwamem {
 
     executor 'sge'
     scratch true
-    clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=26:00:00 -l athena=true'
+    clusterOptions '-l h_vmem=5G -pe smp 4-8 -l h_rt=26:00:00 -l athena=true'
 
 
     input:
@@ -193,7 +193,7 @@ process bwamem {
     #!/bin/bash -l
     set -o pipefail
     spack load bwa
-    bwa mem -t 8 -M /athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta $reads | samtools view -bS -q 30 - > ${Sample}.bam
+    bwa mem -t \${NSLOTS} -M /athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta $reads | samtools view -bS -q 30 - > ${Sample}.bam
     """
 }
 
@@ -207,7 +207,7 @@ process processbam {
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
     executor 'sge'
-    clusterOptions '-l h_vmem=4G -pe smp 8 -l h_rt=16:00:00 -l athena=true'
+    clusterOptions '-l h_vmem=4G -pe smp 4-8 -l h_rt=16:00:00 -l athena=true'
     scratch true
     // cpus 8
 
@@ -323,30 +323,34 @@ process signalTrack {
     }
 
 
-
+finalbedpe.mix(broadpeak)
+    .groupTuple(sort: true)
+    .view()
+    .set{ fripin }
 
 process frip {
     tag "$Sample"
-    publishDir "$results_path/$Sample/qc", mode: 'copy'
+
+    publishDir "$results_path/$Sample/frip", mode: 'copy'
 
     input:
-    set sname, file(bed) from finalbedpe
-    set Sample, file(peaks) from broadpeak
+    set Sample, file(file_list) from fripin
+        //set Sample, file(peaks) from broadpeak
     file(lncapref) from lncaprefpeaks
     file(bcellref) from bcellrefpeaks
 
     output:
-    set sname, file("${sname}.frip.txt") into frips
-    set sname, file("${sname}.lncapref.frip.txt") into frips2
-    set sname, file("${sname}.bcellref.frip.txt") into frips3
+    set Sample, file("${Sample}.frip.txt") into frips
+    set Sample, file("${Sample}.lncapref.frip.txt") into frips2
+    set Sample, file("${Sample}.bcellref.frip.txt") into frips3
 
     script:
     """
-    getFripQC.py --bed ${bed} --peaks ${peaks} --out ${sname}.frip.txt
+    getFripQC.py --bed ${Sample}.nodup.bedpe.gz --peaks ${Sample}.tn5.broadPeak.gz --out ${Sample}.frip.txt
 
-    getFripQC.py --bed ${bed} --peaks ${lncapref} --out ${sname}.lncapref.frip.txt
+    getFripQC.py --bed ${Sample}.nodup.bedpe.gz --peaks ${lncapref} --out ${Sample}.lncapref.frip.txt
 
-    getFripQC.py --bed ${bed} --peaks ${bcellref} --out ${sname}.bcellref.frip.txt
+    getFripQC.py --bed ${Sample}.nodup.bedpe.gz --peaks ${bcellref} --out ${Sample}.bcellref.frip.txt
         """
 }
 
@@ -384,6 +388,7 @@ finalbamforqc.mix(nsortedbamforqc)
     .mix(picardcomplexity)
     .mix(pbcqc)
     .mix(dupqc)
+    .mix(frips)
     .groupTuple(sort: true)
     .view()
     .set{ qcin }
