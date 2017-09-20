@@ -24,19 +24,22 @@ params.index = 'sampleIndex.csv'
        //params.index = "$baseDir/indexecad.csv"
 //params.index = "$baseDir/indexTest.csv"
        //params.index = 'sampleIndexjc.csv'
+       // Configurable variables
+params.name = false
+params.project = false
 params.genome = 'hg38'
+params.genomes = []
+params.fasta = params.genome ? params.genomes[ params.genome ].fasta ?: false : false
+params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
 params.blacklist = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.blacklist.bed.gz"
        //genome = file(params.genome)
-index = file(params.index)
+       //index = file(params.index)
 params.chrsz = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chrom.sizes"
-params.ref = "/athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
-params.project = 'ecadlowpass'
-
-params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
+       //params.bwa_index = "/athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
        //params.fasta = params.genome ? params.genomes[ params.genome ].fasta ?: false : false
        //params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
 params.notrim = false
-params.saveReference = false
+params.saveReference = true
 params.saveTrimmed = false
 params.saveAlignedIntermediates = false
 params.broad = false
@@ -72,9 +75,16 @@ params.ROADMAP_META="/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/hg
 
 if( params.bwa_index ){
     bwa_index = Channel
-    .fromPath(params.bwa_index)
-    .ifEmpty { exit 1, "BWA index not found: ${params.bwa_index}" }
+        .fromPath(params.bwa_index)
+        .ifEmpty { exit 1, "BWA index not found: ${params.bwa_index}" }
+} else if ( params.fasta ){
+    fasta = file(params.fasta)
+        if( !fasta.exists() ) exit 1, "Fasta file not found: ${params.fasta}"
+                              } else {
+    exit 1, "No reference genome specified!"
 }
+
+
 
 custom_runName = params.name
 if( !(workflow.runName ==~ /[a-z]+_[a-z]+/) ){
@@ -107,13 +117,36 @@ log.info "===================================="
 
 index = file(params.index)
 
-bwaref = file(params.ref)
+       //bwaref = file(params.ref)
 results_path = "./results"
 
 blacklist=file(params.blacklist)
 
+/*
+ * PREPROCESSING - Build BWA index
+ */
+if(!params.bwa_index && fasta){
+    process makeBWAindex {
+        tag fasta
+        publishDir path: { params.saveReference ? "${params.outdir}/reference_genome" : params.outdir },
+                   saveAs: { params.saveReference ? it : null }, mode: 'copy'
 
-// Clear pipeline.db file
+        input:
+        file fasta from fasta
+
+        output:
+        file "BWAIndex" into bwa_index
+
+        script:
+        """
+        spack load bwa
+        mkdir BWAIndex
+        bwa index -a bwtsw $fasta
+        """
+    }
+}
+
+
 
 ////// Check input parameters //////
 
@@ -174,7 +207,8 @@ process bwamem {
 
     input:
     set Sample, file(path), file(reads) from fastq
-    file bwaref from bwa_index.collect()
+    file index from bwa_index.first()
+        //file bwaref from bwa_index.collect()
         //file(bwaref) from bwaref
 
     output:
@@ -185,7 +219,7 @@ process bwamem {
     #!/bin/bash -l
     set -o pipefail
     spack load bwa
-    bwa mem -t \${NSLOTS} -M $bwaref $reads | samtools view -bS -q 30 - > ${Sample}.bam
+    bwa mem -t \${NSLOTS} -M ${index}/genome.fa $reads | samtools view -bS -q 30 - > ${Sample}.bam
     ###bwa mem -t \${NSLOTS} -M /athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta $reads | samtools view -bS -q 30 - > ${Sample}.bam
     """
 }
