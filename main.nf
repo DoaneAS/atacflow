@@ -1,29 +1,14 @@
 #!/usr/bin/env nextflow
-
 /*
 vim: syntax=groovy
 -*- mode: groovy;-*-
- *
- * Copyright (c) 2013-2017, Centre for Genomic Regulation (CRG).
- * Copyright (c) 2013-2017, Paolo Di Tommaso and the respective authors.
- *
- *   This file is part of 'Nextflow'.
- *
- *   Nextflow is free software: you can redistribute it and/or modify
- *   it under the terms of the GNU General Public License as published by
- *   the Free Software Foundation, either version 3 of the License, or
- *   (at your option) any later version.
- *
- *   Nextflow is distributed in the hope that it will be useful,
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *   GNU General Public License for more details.
- *
- *   You should have received a copy of the GNU General Public License
- *   along with Nextflow.  If not, see <http://www.gnu.org/licenses/>.
- */ 
-       //params.fragmentLength = 200
+========================================================================================
+         ELEMENTO - MELNICK LABS ||  ATAC-SEQ   BEST   PRACTICE
+========================================================================================
+#### Authors
+Ashley Stephen Doane <asd2007@med.cornell.edu>
 
+*/
 //params.index = '/home/asd2007/Scripts/nf/fripflow/sindex.tsv'
 
 
@@ -46,6 +31,8 @@ index = file(params.index)
 params.chrsz = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chrom.sizes"
 params.ref = "/athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
 params.project = 'ecadlowpass'
+
+params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
        //params.fasta = params.genome ? params.genomes[ params.genome ].fasta ?: false : false
        //params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
 params.notrim = false
@@ -59,6 +46,7 @@ params.chromsizes = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chr
 params.lncaprefpeak = "$baseDir/data/lncapPeak.narrowPeak" 
 params.bcellrefpeak = "$baseDir/data/gcb.tn5.broadPeak" 
 
+/*
 params.DNASE_BED="/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/reg2map_honeybadger2_dnase_all_p10_ucsc.bed.gz"
 params.BLACK="/athena/elementolab/scratch/asd2007/reference/hg38/hg38.blacklist.bed.gz"
 params.PICARDCONF="/athena/elementolab/scratch/asd2007/reference/hg38/picardmetrics.conf"
@@ -80,10 +68,13 @@ params.ENH='athena/elementolab/scratch/asd2007/reference/hg38/ataqc/reg2map_hone
 params.REG2MAP='/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/hg38_dnase_avg_fseq_signal_formatted.txt.gz'
 params.REG2MAP_BED="/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/hg38_celltype_compare_subsample.bed.gz"
 params.ROADMAP_META="/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/hg38_dnase_avg_fseq_signal_metadata.txt"
+*/
 
-
-
-
+if( params.bwa_index ){
+    bwa_index = Channel
+    .fromPath(params.bwa_index)
+    .ifEmpty { exit 1, "BWA index not found: ${params.bwa_index}" }
+}
 
 custom_runName = params.name
 if( !(workflow.runName ==~ /[a-z]+_[a-z]+/) ){
@@ -183,6 +174,7 @@ process bwamem {
 
     input:
     set Sample, file(path), file(reads) from fastq
+    file index from bwa_index.collect()
         //file(bwaref) from bwaref
 
     output:
@@ -193,7 +185,8 @@ process bwamem {
     #!/bin/bash -l
     set -o pipefail
     spack load bwa
-    bwa mem -t \${NSLOTS} -M /athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta $reads | samtools view -bS -q 30 - > ${Sample}.bam
+    bwa mem -t \${NSLOTS} -M $index $reads | samtools view -bS -q 30 - > ${Sample}.bam
+    ###bwa mem -t \${NSLOTS} -M /athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta $reads | samtools view -bS -q 30 - > ${Sample}.bam
     """
 }
 
