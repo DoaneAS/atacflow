@@ -220,7 +220,6 @@ process bwamem {
     set -o pipefail
     spack load bwa
     bwa mem -t \${NSLOTS} -M ${index}/genome.fa $reads | samtools view -bS -q 30 - > ${Sample}.bam
-    ###bwa mem -t \${NSLOTS} -M /athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta $reads | samtools view -bS -q 30 - > ${Sample}.bam
     """
 }
 
