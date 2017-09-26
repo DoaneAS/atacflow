@@ -27,14 +27,14 @@ params.index = 'sampleIndex.csv'
        // Configurable variables
 params.name = false
 params.project = false
-params.genome = 'hg38'
+params.genome = 'mm10'
 params.genomes = []
 params.fasta = params.genome ? params.genomes[ params.genome ].fasta ?: false : false
 params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
-params.blacklist = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.blacklist.bed.gz"
+params.blacklist = "/athena/elementolab/scratch/asd2007/reference/mm10/mm10.blacklist.bed.gz"
        //genome = file(params.genome)
        //index = file(params.index)
-params.chrsz = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chrom.sizes"
+params.chrsz = "/athena/elementolab/scratch/asd2007/reference/mm10/mm10.chrom.sizes"
        //params.bwa_index = "/athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
        //params.fasta = params.genome ? params.genomes[ params.genome ].fasta ?: false : false
        //params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
@@ -45,7 +45,7 @@ params.saveAlignedIntermediates = false
 params.broad = false
 params.outdir = './results'
 params.email = 'ashley.doane@gmail.com'
-params.chromsizes = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chrom.sizes"
+params.chromsizes = "/athena/elementolab/scratch/asd2007/reference/mm10/mm10.chrom.sizes"
 params.lncaprefpeak = "$baseDir/data/lncapPeak.narrowPeak" 
 params.bcellrefpeak = "$baseDir/data/gcb.tn5.broadPeak" 
 
@@ -202,7 +202,7 @@ process bwamem {
 
     executor 'sge'
     scratch true
-    clusterOptions '-l h_vmem=5G -pe smp 4-8 -l h_rt=26:00:00 -l athena=true'
+    clusterOptions '-l h_vmem=5G -pe smp 4-12 -l h_rt=26:00:00 -l athena=true'
 
 
     input:
@@ -233,7 +233,7 @@ process processbam {
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
     executor 'sge'
-    clusterOptions '-l h_vmem=4G -pe smp 4-8 -l h_rt=16:00:00 -l athena=true'
+    clusterOptions '-l h_vmem=4G -pe smp 8 -l h_rt=16:00:00 -l athena=true'
     scratch true
     // cpus 8
 
