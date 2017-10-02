@@ -27,14 +27,14 @@ params.index = 'sampleIndex.csv'
        // Configurable variables
 params.name = false
 params.project = false
-params.genome = 'mm10'
+params.genome = 'hg38'
 params.genomes = []
 params.fasta = params.genome ? params.genomes[ params.genome ].fasta ?: false : false
 params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
-params.blacklist = "/athena/elementolab/scratch/asd2007/reference/mm10/mm10.blacklist.bed.gz"
+params.blacklist = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.blacklist.bed.gz"
        //genome = file(params.genome)
        //index = file(params.index)
-params.chrsz = "/athena/elementolab/scratch/asd2007/reference/mm10/mm10.chrom.sizes"
+params.chrsz = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chrom.sizes"
        //params.bwa_index = "/athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
        //params.fasta = params.genome ? params.genomes[ params.genome ].fasta ?: false : false
        //params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
@@ -45,7 +45,7 @@ params.saveAlignedIntermediates = false
 params.broad = false
 params.outdir = './results'
 params.email = 'ashley.doane@gmail.com'
-params.chromsizes = "/athena/elementolab/scratch/asd2007/reference/mm10/mm10.chrom.sizes"
+params.chromsizes = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chrom.sizes"
 params.lncaprefpeak = "$baseDir/data/lncapPeak.narrowPeak" 
 params.bcellrefpeak = "$baseDir/data/gcb.tn5.broadPeak" 
 
@@ -179,6 +179,13 @@ sizefactors = Channel.from(1)
 bcellrefpeaks = Channel.fromPath(params.bcellrefpeak)
 
 lncaprefpeaks = Channel.fromPath(params.lncaprefpeak)
+
+dnase = Channel.fromPath(params.DNASE)
+tss_enrich = Channel.fromPath(params.TSS_ENRICH)
+prom = Channel.fromPath(params.PROM)
+enh = Channel.fromPath(params.ENH)
+reg2map = Channel.fromPath(params.REG2MAP)
+roadmap_meta = Channel.fromPath(params.ROADMAP_META)
 
 fastq = Channel
        .from(index.readLines())
@@ -442,9 +449,15 @@ process atacqc {
     samtools index ${Sample}.sorted.nodup.noM.black.bam
     samtools index ${Sample}.sorted.bam
     run_ataqc.athena.nf.sh -s ${Sample} -g hg38
+
     """
 
 }
+
+
+
+
+
 
 
 
