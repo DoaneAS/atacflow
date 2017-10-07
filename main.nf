@@ -49,29 +49,8 @@ params.chromsizes = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chr
 params.lncaprefpeak = "$baseDir/data/lncapPeak.narrowPeak" 
 params.bcellrefpeak = "$baseDir/data/gcb.tn5.broadPeak" 
 
-/*
-params.DNASE_BED="/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/reg2map_honeybadger2_dnase_all_p10_ucsc.bed.gz"
-params.BLACK="/athena/elementolab/scratch/asd2007/reference/hg38/hg38.blacklist.bed.gz"
-params.PICARDCONF="/athena/elementolab/scratch/asd2007/reference/hg38/picardmetrics.conf"
-params.REF="/athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
-params.REFbt2="/athena/elementolab/scratch/asd2007/reference/hg38/bowtie2_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
-params.bwt2_idx="/athena/elementolab/scratch/asd2007/reference/hg38/bowtie2_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
-params.RG="hg38"
-params.SPEC="hs"
-params.REFGen="/athena/elementolab/scratch/asd2007/reference/hg38/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
-params.seq="/athena/elementolab/scratch/asd2007/reference/hg38/seq"
-params.gensz="hs"
-params.bwt2_idx="/athena/elementolab/scratch/asd2007/reference/hg38/bowtie2_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
-params.REF_FASTA="/athena/elementolab/scratch/asd2007/reference/hg38/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
-params.species_browser='hg38'
-params.TSS_ENRICH="/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/hg38_gencode_tss_unique.bed.gz"
-params.DNASE='/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/reg2map_honeybadger2_dnase_all_p10_ucsc.hg19_to_hg38.bed.gz'
-params.PROM='/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/reg2map_honeybadger2_dnase_prom_p2.hg19_to_hg38.bed.gz'
-params.ENH='athena/elementolab/scratch/asd2007/reference/hg38/ataqc/reg2map_honeybadger2_dnase_enh_p2.hg19_to_hg38.bed.gz'
-params.REG2MAP='/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/hg38_dnase_avg_fseq_signal_formatted.txt.gz'
-params.REG2MAP_BED="/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/hg38_celltype_compare_subsample.bed.gz"
-params.ROADMAP_META="/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/hg38_dnase_avg_fseq_signal_metadata.txt"
-*/
+params.picardconfig="/athena/elementolab/scratch/asd2007/reference/hg38/picardmetrics.conf"
+
 
 if( params.bwa_index ){
     bwa_index = Channel
@@ -119,7 +98,7 @@ index = file(params.index)
 
        //bwaref = file(params.ref)
 results_path = "./results"
-
+picardconf = file(params.picardconfig)
 blacklist=file(params.blacklist)
 
 /*
@@ -181,11 +160,13 @@ bcellrefpeaks = Channel.fromPath(params.bcellrefpeak)
 lncaprefpeaks = Channel.fromPath(params.lncaprefpeak)
 
 dnase = Channel.fromPath(params.DNASE)
-tss_enrich = Channel.fromPath(params.TSS_ENRICH)
+tssenrich = Channel.fromPath(params.TSS_ENRICH)
 prom = Channel.fromPath(params.PROM)
 enh = Channel.fromPath(params.ENH)
 reg2map = Channel.fromPath(params.REG2MAP)
-roadmap_meta = Channel.fromPath(params.ROADMAP_META)
+roadmapmeta = Channel.fromPath(params.ROADMAP_META)
+ref = Channel.fromPath(params.REF)
+blackqc = Channel.fromPath(params.BLACK)
 
 fastq = Channel
        .from(index.readLines())
@@ -209,7 +190,7 @@ process bwamem {
 
     executor 'sge'
     scratch true
-    clusterOptions '-l h_vmem=5G -pe smp 4-12 -l h_rt=26:00:00 -l athena=true'
+    clusterOptions '-l h_vmem=5G -pe smp 4-8 -l h_rt=26:00:00 -l athena=true'
 
 
     input:
@@ -251,6 +232,7 @@ process processbam {
 
     output:
     set Sample, file("${Sample}.sorted.bam") into sortedbam
+    set Sample, file("${Sample}.sorted.bam") into sortbamqc
     set Sample, file("${Sample}.sorted.bam") into sortedbamqc
     set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into finalbam
     set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into finalbamforqc
@@ -397,17 +379,20 @@ process picardqc {
 
     input:
     set Sample, file(sortbamqc) from sortedbamqc
-
+    file(picardconfig) from picardconf 
 
     output:
     set Sample, file("QCmetrics/${Sample}.picardcomplexity.qc") into picardcomplexity
-    set Sample, file(sortbamqc) into sortbamqc
+        //set Sample, file(sortbamqc) into sortbamqc
 
     script:
     """
     mkdir -p QCmetrics
-    picardmetrics run -f \$PICARDCONF -o QCmetrics $sortbamqc
-    cp QCmetrics/*.EstimateLibraryComplexity.log QCmetrics/${Sample}.picardcomplexity.qc
+    source /home/asd2007/Scripts/picard.env 
+    spack load jdk
+    spack load samtools
+    picard EstimateLibraryComplexity I=${sortbamqc} O=${Sample}.EstimateLibraryComplexity.log
+    cp *.EstimateLibraryComplexity.log QCmetrics/${Sample}.picardcomplexity.qc
     """
 
 }
@@ -434,6 +419,15 @@ process atacqc {
 
     input:
     set Sample, file(file_list) from qcin
+        file(dnase) from dnase
+        file(tssenrich) from tssenrich
+        file(prom) from prom
+        file(enh) from enh
+        file(reg2map) from reg2map
+        file(roadmapmeta) from roadmapmeta
+        file(ref) from ref
+        file(black) from blackqc
+    
 
     output:
     set Sample, file("${Sample}*.preseq.log"), file("${Sample}*_qc.txt"), file("${Sample}*large_vplot.png"), file("${Sample}*vplot.png"), file("${Sample}_qc.trad.txt"), file("${Sample}*qc.html"), file("*qc.save") into qcdat
@@ -442,7 +436,13 @@ process atacqc {
 
     script:
     """
+    #!/bin/bash
+   ## source activate bds_atac
 
+    OUTPREFIX=${Sample}
+    INPREFIX=${Sample}
+    SAMPLE=${Sample}
+    PBC=${Sample}.pbc.qc
     echo ${Sample} ${file_list}
     spack load jdk
     spack load samtools
@@ -450,10 +450,40 @@ process atacqc {
     samtools index ${Sample}.sorted.bam
     run_ataqc.athena.nf.sh -s ${Sample} -g hg38
 
+
+  ##  OUTPREFIX=${Sample}
+  ##  INPREFIX=${Sample}
+  ##  SAMPLE=${Sample}
+  ##  PBC=${Sample}.pbc.qc
+
+
+  ##  python ${baseDir}/bin/run_ataqc.athena.py --workdir \$PWD  \
+  ##  --outdir qc \
+  ##  --outprefix ${Sample} \
+  ##  --genome hg38 \
+  ##  --ref ${ref} --tss ${tssenrich} \
+  ##  --dnase ${dnase} \
+  ##  --blacklist ${black} \
+  ##  --prom ${prom} \
+  ##  --enh ${enh} \
+  ## --reg2map ${reg2map} \
+  ## --meta ${roadmapmeta} \
+  ## --alignedbam ${Sample}.sorted.bam  \
+  ## --alignmentlog ${Sample}.align.log \
+  ## --coordsortbam ${Sample}.sorted.bam \
+  ## --duplog ${Sample}.dup.qc \
+  ## --pbc ${Sample}.pbc.qc \
+  ## --finalbam ${Sample}.sorted.nodup.noM.black.bam \
+  ## --finalbed ${Sample}.nodup.tn5.tagAlign.gz \
+  ## --bigwig ${Sample}.sizefactors.bw \
+  ## --peaks ${Sample}.tn5.broadPeak.gz \
+  ## --naive_overlap_peaks ${Sample}.tn5.broadPeak.gz \
+  ## --idr_peaks ${Sample}.tn5.broadPeak.gz  --processes 4
+
     """
 
 }
-
+ 
 
 
 
