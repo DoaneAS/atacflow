@@ -6,7 +6,7 @@ This pipeline inspired by and based on the [ENCODE ATAC-seq processubg pipeline]
 the *prototype* ATAC-seq pipeline
 developed by [Anshul Kundaje's lab](https://github.com/kundajelab/atac_dnase_pipelines) at Stanford University
 
-# Installation
+## Installation
 * Install [Nextflow](https://www.nextflow.io)
 * Clone repository 
   * using nextflow: ```nextflow clone DoaneAS/atacflow ./```
