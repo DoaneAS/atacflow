@@ -220,6 +220,12 @@ process processbam {
     tag "$Sample"
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
+    publishDir "${results_path}/${Sample}/${Sample}", mode: 'copy',
+        saveAs: {filename ->
+            if (filename.indexOf("sorted.nodup.noM.black.bam") > 0) "$filename"
+                else if (filename.indexOf("*window500.hist_graph.pdf") > 0) "$filename"
+                    else params.saveAlignedIntermediates ? filename : null
+                         }
     executor 'sge'
     clusterOptions '-l h_vmem=4G -pe smp 8 -l h_rt=16:00:00 -l athena=true'
     scratch true
