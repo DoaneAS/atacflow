@@ -188,10 +188,11 @@ process bwamem {
     tag "$Sample"
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
+    cpus 8
     executor 'sge'
+    penv 'smp'
+    clusterOptions '-l h_vmem=4G -l h_rt=24:00:00 -l athena=true -R y'
     scratch true
-    clusterOptions '-l h_vmem=5G -pe smp 4-8 -l h_rt=26:00:00 -l athena=true'
-
 
     input:
     set Sample, file(path), file(reads) from fastq
@@ -207,6 +208,7 @@ process bwamem {
     #!/bin/bash -l
     set -o pipefail
     spack load bwa
+    spack load samtools
     bwa mem -t \${NSLOTS} -M ${index}/genome.fa $reads | samtools view -bS -q 30 - > ${Sample}.bam
     """
 }
@@ -220,14 +222,10 @@ process processbam {
     tag "$Sample"
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
-    publishDir "${results_path}/${Sample}/${Sample}", mode: 'copy',
-        saveAs: {filename ->
-            if (filename.indexOf("sorted.nodup.noM.black.bam") > 0) "$filename"
-                else if (filename.indexOf("*window500.hist_graph.pdf") > 0) "$filename"
-                    else params.saveAlignedIntermediates ? filename : null
-                         }
     executor 'sge'
-    clusterOptions '-l h_vmem=4G -pe smp 8 -l h_rt=16:00:00 -l athena=true'
+    cpus 8
+    penv 'smp'
+    clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
     scratch true
     // cpus 8
 
