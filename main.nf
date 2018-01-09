@@ -155,18 +155,15 @@ sizefactors = Channel.from(1)
 
 
 
-bcellrefpeaks = Channel.fromPath(params.bcellrefpeak)
-
-lncaprefpeaks = Channel.fromPath(params.lncaprefpeak)
-
-dnase = Channel.fromPath(params.DNASE)
-tssenrich = Channel.fromPath(params.TSS_ENRICH)
-prom = Channel.fromPath(params.PROM)
-enh = Channel.fromPath(params.ENH)
-reg2map = Channel.fromPath(params.REG2MAP)
-roadmapmeta = Channel.fromPath(params.ROADMAP_META)
-ref = Channel.fromPath(params.REF)
-blackqc = Channel.fromPath(params.BLACK)
+bcellrefpeaks = file(params.bcellrefpeak)
+dnase = file(params.DNASE)
+tssenrich = file(params.TSS_ENRICH)
+prom = file(params.PROM)
+enh = file(params.ENH)
+reg2map = file(params.REG2MAP)
+roadmapmeta = file(params.ROADMAP_META)
+ref = file(params.REF)
+blackqc = file(params.BLACK)
 
 fastq = Channel
        .from(index.readLines())
@@ -324,7 +321,7 @@ process signalTrack {
         // executor 'sge'
         // clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=10:00:00 -l athena=true'
         // scratch true
-     cpus 12
+    cpus 12
 
     input:
     set Sample, file(sbam) from bamforsignal
@@ -409,6 +406,7 @@ finalbamforqc.mix(nsortedbamforqc)
     .mix(dupqc)
     .mix(frips)
     .groupTuple(sort: true)
+    .view()
     .set{ qcin }
 
 
@@ -419,15 +417,14 @@ process atacqc {
 
     input:
     set Sample, file(file_list) from qcin
-        file(dnase) from dnase
-        file(tssenrich) from tssenrich
-        file(prom) from prom
-        file(enh) from enh
-        file(reg2map) from reg2map
-        file(roadmapmeta) from roadmapmeta
-        file(ref) from ref
-        file(black) from blackqc
-    
+    file(dnase) from dnase
+    file(tssenrich) from tssenrich
+    file(prom) from prom
+    file(enh) from enh
+    file(reg2map) from reg2map
+    file(roadmapmeta) from roadmapmeta
+    file(ref) from ref
+    file(black) from blackqc
 
     output:
     set Sample, file("${Sample}*.preseq.log"), file("${Sample}*_qc.txt"), file("${Sample}*large_vplot.png"), file("${Sample}*vplot.png"), file("${Sample}_qc.trad.txt"), file("${Sample}*qc.html"), file("*qc.save") into qcdat
@@ -448,13 +445,6 @@ process atacqc {
     spack load samtools
     samtools index ${Sample}.sorted.nodup.noM.black.bam
     samtools index ${Sample}.sorted.bam
-#    run_ataqc.athena.nf.sh -s ${Sample} -g hg38
-
-
-  ##  OUTPREFIX=${Sample}
-  ##  INPREFIX=${Sample}
-  ##  SAMPLE=${Sample}
-  ##  PBC=${Sample}.pbc.qc
 
 
     python ${baseDir}/bin/run_ataqc.athena.py --workdir \$PWD  \\
@@ -466,22 +456,21 @@ process atacqc {
     --blacklist ${black} \\
     --prom ${prom} \\
     --enh ${enh} \\
-   --reg2map ${reg2map} \\
-   --meta ${roadmapmeta} \\
-   --alignedbam ${Sample}.sorted.bam  \\
-   --alignmentlog ${Sample}.align.log \\
-   --coordsortbam ${Sample}.sorted.bam \\
-   --duplog ${Sample}.dup.qc \\
-   --pbc ${Sample}.pbc.qc \\
-   --finalbam ${Sample}.sorted.nodup.noM.black.bam \\
-   --finalbed ${Sample}.nodup.tn5.tagAlign.gz \\
-   --bigwig ${Sample}.sizefactors.bw \\
-   --peaks ${Sample}.tn5.broadPeak.gz \\
-   --naive_overlap_peaks ${Sample}.tn5.broadPeak.gz \\
-   --idr_peaks ${Sample}.tn5.broadPeak.gz  --processes 4
+    --reg2map ${reg2map} \\
+    --meta ${roadmapmeta} \\
+    --alignedbam ${Sample}.sorted.bam  \\
+    --alignmentlog ${Sample}.align.log \\
+    --coordsortbam ${Sample}.sorted.bam \\
+    --duplog ${Sample}.dup.qc \\
+    --pbc ${Sample}.pbc.qc \\
+    --finalbam ${Sample}.sorted.nodup.noM.black.bam \\
+    --finalbed ${Sample}.nodup.tn5.tagAlign.gz \\
+    --bigwig ${Sample}.sizefactors.bw \\
+    --peaks ${Sample}.tn5.broadPeak.gz \\
+    --naive_overlap_peaks ${Sample}.tn5.broadPeak.gz \\
+    --idr_peaks ${Sample}.tn5.broadPeak.gz  --processes 4
 
     """
-
 }
  
 
