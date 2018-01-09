@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/home/asd2007/intel/intelpython3/envs/bds_atac/bin/python
 
 # Ashley Doane, Elemento Lab
 # adapted from: Daniel Kim, CS Foo

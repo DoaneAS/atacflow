@@ -344,7 +344,6 @@ process signalTrack {
 
 finalbedpe.mix(broadpeak)
     .groupTuple(sort: true)
-    .view()
     .set{ fripin }
 
 process frip {
@@ -355,19 +354,17 @@ process frip {
     input:
     set Sample, file(file_list) from fripin
         //set Sample, file(peaks) from broadpeak
-    file(lncapref) from lncaprefpeaks
+        //   file(lncapref) from lncaprefpeaks
     file(bcellref) from bcellrefpeaks
 
     output:
     set Sample, file("${Sample}.frip.txt") into frips
-    set Sample, file("${Sample}.lncapref.frip.txt") into frips2
+        //set Sample, file("${Sample}.lncapref.frip.txt") into frips2
     set Sample, file("${Sample}.bcellref.frip.txt") into frips3
 
     script:
     """
     getFripQC.py --bed ${Sample}.nodup.bedpe.gz --peaks ${Sample}.tn5.broadPeak.gz --out ${Sample}.frip.txt
-
-    getFripQC.py --bed ${Sample}.nodup.bedpe.gz --peaks ${lncapref} --out ${Sample}.lncapref.frip.txt
 
     getFripQC.py --bed ${Sample}.nodup.bedpe.gz --peaks ${bcellref} --out ${Sample}.bcellref.frip.txt
         """
@@ -412,7 +409,6 @@ finalbamforqc.mix(nsortedbamforqc)
     .mix(dupqc)
     .mix(frips)
     .groupTuple(sort: true)
-    .view()
     .set{ qcin }
 
 
@@ -441,7 +437,7 @@ process atacqc {
     script:
     """
     #!/bin/bash
-   ## source activate bds_atac
+    source activate bds_atac
 
     OUTPREFIX=${Sample}
     INPREFIX=${Sample}
@@ -452,7 +448,7 @@ process atacqc {
     spack load samtools
     samtools index ${Sample}.sorted.nodup.noM.black.bam
     samtools index ${Sample}.sorted.bam
-    run_ataqc.athena.nf.sh -s ${Sample} -g hg38
+#    run_ataqc.athena.nf.sh -s ${Sample} -g hg38
 
 
   ##  OUTPREFIX=${Sample}
@@ -461,28 +457,28 @@ process atacqc {
   ##  PBC=${Sample}.pbc.qc
 
 
-  ##  python ${baseDir}/bin/run_ataqc.athena.py --workdir \$PWD  \
-  ##  --outdir qc \
-  ##  --outprefix ${Sample} \
-  ##  --genome hg38 \
-  ##  --ref ${ref} --tss ${tssenrich} \
-  ##  --dnase ${dnase} \
-  ##  --blacklist ${black} \
-  ##  --prom ${prom} \
-  ##  --enh ${enh} \
-  ## --reg2map ${reg2map} \
-  ## --meta ${roadmapmeta} \
-  ## --alignedbam ${Sample}.sorted.bam  \
-  ## --alignmentlog ${Sample}.align.log \
-  ## --coordsortbam ${Sample}.sorted.bam \
-  ## --duplog ${Sample}.dup.qc \
-  ## --pbc ${Sample}.pbc.qc \
-  ## --finalbam ${Sample}.sorted.nodup.noM.black.bam \
-  ## --finalbed ${Sample}.nodup.tn5.tagAlign.gz \
-  ## --bigwig ${Sample}.sizefactors.bw \
-  ## --peaks ${Sample}.tn5.broadPeak.gz \
-  ## --naive_overlap_peaks ${Sample}.tn5.broadPeak.gz \
-  ## --idr_peaks ${Sample}.tn5.broadPeak.gz  --processes 4
+    python ${baseDir}/bin/run_ataqc.athena.py --workdir \$PWD  \\
+    --outdir \$PWD \\
+    --outprefix ${Sample} \\
+    --genome hg38 \\
+    --ref ${ref} --tss ${tssenrich} \\
+    --dnase ${dnase} \\
+    --blacklist ${black} \\
+    --prom ${prom} \\
+    --enh ${enh} \\
+   --reg2map ${reg2map} \\
+   --meta ${roadmapmeta} \\
+   --alignedbam ${Sample}.sorted.bam  \\
+   --alignmentlog ${Sample}.align.log \\
+   --coordsortbam ${Sample}.sorted.bam \\
+   --duplog ${Sample}.dup.qc \\
+   --pbc ${Sample}.pbc.qc \\
+   --finalbam ${Sample}.sorted.nodup.noM.black.bam \\
+   --finalbed ${Sample}.nodup.tn5.tagAlign.gz \\
+   --bigwig ${Sample}.sizefactors.bw \\
+   --peaks ${Sample}.tn5.broadPeak.gz \\
+   --naive_overlap_peaks ${Sample}.tn5.broadPeak.gz \\
+   --idr_peaks ${Sample}.tn5.broadPeak.gz  --processes 4
 
     """
 
