@@ -157,6 +157,7 @@ sizefactors = Channel.from(1)
 
 bcellrefpeaks = file(params.bcellrefpeak)
 dnase = file(params.DNASE)
+encodedhs = file(params.ENCODEDHS)
 tssenrich = file(params.TSS_ENRICH)
 prom = file(params.PROM)
 enh = file(params.ENH)
@@ -164,6 +165,7 @@ reg2map = file(params.REG2MAP)
 roadmapmeta = file(params.ROADMAP_META)
 ref = file(params.REF)
 blackqc = file(params.BLACK)
+encodedhs = file(params.ENCODEDHS)
 
 fastq = Channel
        .from(index.readLines())
@@ -321,7 +323,7 @@ process signalTrack {
         // executor 'sge'
         // clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=10:00:00 -l athena=true'
         // scratch true
-    cpus 12
+    cpus 8
 
     input:
     set Sample, file(sbam) from bamforsignal
@@ -333,7 +335,7 @@ process signalTrack {
 
     script:
     """
-    getbamcov.sh ${sbam} ${Sample}
+    getbamcov.sh ${sbam} ${Sample} ${task.cpus}
 
     """
     }
@@ -353,17 +355,21 @@ process frip {
         //set Sample, file(peaks) from broadpeak
         //   file(lncapref) from lncaprefpeaks
     file(bcellref) from bcellrefpeaks
+    file(encodedhs) from encodedhs
 
     output:
     set Sample, file("${Sample}.frip.txt") into frips
-        //set Sample, file("${Sample}.lncapref.frip.txt") into frips2
-    set Sample, file("${Sample}.bcellref.frip.txt") into frips3
+    set Sample, file("${Sample}.bcellref.frip.txt") into frips2
+    set Sample, file("${Sample}.encodedhs.frip.txt") into frips3
 
     script:
     """
     getFripQC.py --bed ${Sample}.nodup.bedpe.gz --peaks ${Sample}.tn5.broadPeak.gz --out ${Sample}.frip.txt
 
     getFripQC.py --bed ${Sample}.nodup.bedpe.gz --peaks ${bcellref} --out ${Sample}.bcellref.frip.txt
+
+    getFripQC.py --bed ${Sample}.nodup.bedpe.gz --peaks ${encodedhs} --out ${Sample}.encodedhs.frip.txt
+
         """
 }
 
@@ -415,6 +421,8 @@ process atacqc {
 
     publishDir "$results_path/$Sample/qc", mode: 'copy'
 
+    cpus 4
+
     input:
     set Sample, file(file_list) from qcin
     file(dnase) from dnase
@@ -443,8 +451,8 @@ process atacqc {
     echo ${Sample} ${file_list}
     spack load jdk
     spack load samtools
-    samtools index ${Sample}.sorted.nodup.noM.black.bam
-    samtools index ${Sample}.sorted.bam
+    samtools index -@4 ${Sample}.sorted.nodup.noM.black.bam
+    samtools index -@4 ${Sample}.sorted.bam
 
 
     python ${baseDir}/bin/run_ataqc.athena.py --workdir \$PWD  \\
@@ -468,7 +476,7 @@ process atacqc {
     --bigwig ${Sample}.sizefactors.bw \\
     --peaks ${Sample}.tn5.broadPeak.gz \\
     --naive_overlap_peaks ${Sample}.tn5.broadPeak.gz \\
-    --idr_peaks ${Sample}.tn5.broadPeak.gz  --processes 4
+    --idr_peaks ${Sample}.tn5.broadPeak.gz  --processes ${task.cpus}
 
     """
 }
