@@ -5,10 +5,10 @@
 p1=$1
 BLACK=$2
 MYSLOTS=$3
+NSLOTS="8"
 
-if [ -z ${NSLOTS+x}  ]
-then
-    NSLOTS=$MYSLOTS
+if [ -z "${NSLOTS}+x"  ] ; then
+    NSLOTS="${MYSLOTS}"
 fi
 
 
@@ -24,10 +24,10 @@ fi
 
 
 
-spack load jdk
+#spack load jdk
 spack load samtools
 spack load bedtools2
-spack load r
+#spack load r
 
 #export R_JAVA_LD_LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server
 #export PATH="/home/asd2007/Tools/bedtools2/bin:$PATH"
@@ -36,18 +36,18 @@ export PICARD="/home/asd2007/Tools/picard/build/libs/picard.jar"
 
 export PATH="/home/asd2007/Tools/picard/build/libs:$PATH"
 
-export PATH=$JAVA_HOME/bin:$PATH
+#export PATH=$JAVA_HOME/bin:$PATH
 
-alias picard="java -Xms500m -Xmx3G -jar $PICARD"
+#alias picard="java -Xms500m -Xmx3G -jar $PICARD"
 
 #export PATH="/athena/elementolab/scratch/asd2007/Tools/homer/bin:$PATH"
-    echo "Sorting..."
-    out1prefix=$(echo $p1 | sed 's/\.bam$//')
-    out1="${out1prefix}.sorted.bam"
-    echo ${out1}
-    samtools view -u -@ ${NSLOTS} -q 30 $p1 | sambamba sort --memory-limit 32GB \
-             --nthreads ${NSLOTS} --tmpdir ${TMPDIR} /dev/stdin --out ${out1}
-    samtools index $out1
+echo "Sorting..."
+out1prefix=$(echo $p1 | sed 's/\.bam$//')
+out1="${out1prefix}.sorted.bam"
+echo ${out1}
+#samtools view -u -q 30 Sample_Ly7_pooled_500k.bam | sambamba sort --memory-limit 32GB --nthreads 6 /dev/stdin --out Sample_Ly7_pooled_500k.sorted.bam
+samtools view -u -q 30 "${p1}" | sambamba sort --memory-limit 32GB --nthreads ${NSLOTS} --out ${out1} /dev/stdin
+samtools index $out1
     # echo "aligning : $TMPDIR/${Sample}.R1.trim.fq ,  $TMPDIR/${Sample}.R2.trim.fq using bwa-mem.."
     # bwa mem -t ${NSLOTS} -M $TMPDIR/BWAIndex/genome.fa $TMPDIR/${Sample}.R1.trim.fastq $TMPDIR/${Sample}.R2.trim.fastq | samtools view -bS - >  $TMPDIR/${Sample}.bam
 #fi
@@ -90,7 +90,7 @@ samtools index ${out4}
 out5=$(echo $out1 | sed 's/\.bam$/.nsorted.nodup.noM.bam/')
 
 
-sambamba sort --memory-limit 32GB -n -t ${NSLOTS} --out ${out1prefix}.nsorted.nodup.noM.bam ${out4}
+sambamba sort --memory-limit 32GB -n -t ${NSLOTS} --tmpdir="${TMPDIR}" --out ${out1prefix}.nsorted.nodup.noM.bam ${out4}
 
 rm ${out2m}
 
