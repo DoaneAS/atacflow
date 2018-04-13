@@ -31,10 +31,15 @@ params.genome = 'hg38'
 params.genomes = []
 params.fasta = params.genome ? params.genomes[ params.genome ].fasta ?: false : false
 params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
-params.blacklist = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.blacklist.bed.gz"
+       //params.blacklist = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.blacklist.bed.gz"
+
+params.blacklist = params.genome ? params.genomes[ params.genome ].blacklist ?: false : false
+
+
+params.black = params.genome ? params.genomes[ params.genome ].BLACK ?: false : false
        //genome = file(params.genome)
        //index = file(params.index)
-params.chrsz = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chrom.sizes"
+       //params.chrsz = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chrom.sizes"
        //params.bwa_index = "/athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
        //params.fasta = params.genome ? params.genomes[ params.genome ].fasta ?: false : false
        //params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
@@ -253,7 +258,6 @@ process processbam {
     """
     #!/bin/bash -l
     set -o pipefail
-    spack load jdk
     processAlignment.nf.sh ${nbam} ${BLACK} 8
     """
 }
@@ -364,6 +368,8 @@ process frip {
 
     script:
     """
+    #!/bin/bash
+    spack load bedtools2
     getFripQC.py --bed ${Sample}.nodup.bedpe.gz --peaks ${Sample}.tn5.broadPeak.gz --out ${Sample}.frip.txt
 
     getFripQC.py --bed ${Sample}.nodup.bedpe.gz --peaks ${bcellref} --out ${Sample}.bcellref.frip.txt
@@ -508,7 +514,6 @@ workflow.onComplete {
     Error report: ${workflow.errorReport ?: '-'}
     """
 }
-
 
 
 
