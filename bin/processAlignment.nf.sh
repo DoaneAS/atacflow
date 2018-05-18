@@ -27,7 +27,6 @@ fi
 spack load jdk
 spack load samtools
 spack load bedtools2
-spack load r
 
 #export R_JAVA_LD_LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server
 #export PATH="/home/asd2007/Tools/bedtools2/bin:$PATH"
@@ -69,7 +68,13 @@ samtools index $out2
 
 out2m=$(echo $out1 | sed 's/\.bam$/.nodup.noM.temp.bam/')
 
-samtools idxstats $out2 | cut -f 1 | grep -v chrM | xargs samtools view -b $out2 > $out2m
+out3=$(echo $out1 | sed 's/\.bam$/.nodup.noM.bam/')
+
+export CHROMOSOMES=$(samtools view -H $out2 | grep '^@SQ' | cut -f 2 | grep -v -e _ -e chrM -e chrX -e chrY -e 'VN:' | sed 's/SN://' | xargs echo)
+
+samtools view -@ ${NSLOTS} -b -h -f 3 -F 4 -F 8 -F 256 -F 1024 -F 2048 -q 30 $out2 $CHROMOSOMES > ${out3}
+
+#samtools idxstats $out2 | cut -f 1 | grep -v chrM | xargs samtools view -b $out2 > $out2m
 
 
 #something odd happening
@@ -77,8 +82,7 @@ out2mb=$(echo $out1 | sed 's/\.bam$/.no.black.bam/')
 #bedtools subtract -A -a $out2m -b $BLACK > $out2mb
 # Remove multimapping and improper reads
 
-out3=$(echo $out1 | sed 's/\.bam$/.nodup.noM.bam/')
-samtools view -@ 6 -F 1804 -f 2 -u ${out2m} > ${out3}
+#samtools view -@ 6 -F 1804 -f 2 -u ${out2m} > ${out3}
 samtools index $out3
 
 
@@ -92,15 +96,12 @@ out5=$(echo $out1 | sed 's/\.bam$/.nsorted.nodup.noM.bam/')
 
 sambamba sort --memory-limit 32GB -n -t ${NSLOTS} --tmpdir="${TMPDIR}" --out ${out1prefix}.nsorted.nodup.noM.bam ${out4}
 
-rm ${out2m}
+#rm ${out2m}
 
 
 
-# histogram file
-for w in 1000 500
-do
-    picard CollectInsertSizeMetrics I=$out4 O="${out4}.window${w}.hist_data" H="${out4}.window${w}.hist_graph.pdf" W=${w}
-done
+
+
 
 
 
@@ -142,3 +143,12 @@ bedtools bamtobed -bedpe -i $dupmark_bam | awk 'BEGIN{OFS="\t"}{print $1,$2,$4,$
 rm $dupmark_bam
 
 rm ${out1prefix}.dupmark.bam
+
+
+
+spack load r
+# histogram file
+for w in 1000 500
+do
+    picard CollectInsertSizeMetrics I=$out4 O="${out4}.window${w}.hist_data" H="${out4}.window${w}.hist_graph.pdf" W=${w}
+done

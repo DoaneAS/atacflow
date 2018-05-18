@@ -13,36 +13,20 @@ Ashley Stephen Doane <asd2007@med.cornell.edu>
 
 
 
-version = 1.1
+version = 1.2
 
 // SET PARAMS
 
 params.name = 'ecadd4547'
 params.index = 'sampleIndex.csv'
-   //params.index = 'indexpooled.tsv'
-       //params.index = 'Sample_Ly7_pooled_100k'
-       //params.index = "$baseDir/indexecad.csv"
-//params.index = "$baseDir/indexTest.csv"
-       //params.index = 'sampleIndexjc.csv'
-       // Configurable variables
 params.name = false
 params.project = false
 params.genome = 'hg38'
 params.genomes = []
 params.fasta = params.genome ? params.genomes[ params.genome ].fasta ?: false : false
 params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
-       //params.blacklist = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.blacklist.bed.gz"
-
 params.blacklist = params.genome ? params.genomes[ params.genome ].blacklist ?: false : false
-
-
 params.black = params.genome ? params.genomes[ params.genome ].BLACK ?: false : false
-       //genome = file(params.genome)
-       //index = file(params.index)
-       //params.chrsz = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chrom.sizes"
-       //params.bwa_index = "/athena/elementolab/scratch/asd2007/reference/hg38/bwa_index/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta"
-       //params.fasta = params.genome ? params.genomes[ params.genome ].fasta ?: false : false
-       //params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
 params.notrim = false
 params.saveReference = true
 params.saveTrimmed = false
@@ -172,20 +156,60 @@ ref = file(params.REF)
 blackqc = file(params.BLACK)
 encodedhs = file(params.ENCODEDHS)
 
+
 fastq = Channel
-       .from(index.readLines())
-       .map { line ->
-              def list = line.split(',')
-              def Sample = list[0]
-              def path = file(list[1])
-              def reads = file("$path/*{R1,R2}.trim.fastq.gz")
-              // def readsp = "$path/*{R1,R2}.trim.fastq.gz"
-              //  def R1 = file(list[2])
-              //    def R2 = file(list[3])
-              def message = '[INFO] '
-              log.info message
-              [ Sample, path, reads ]
+    .from(index.readLines())
+    .map { line ->
+           def list = line.split(',')
+           def Sample = list[0]
+           def path = file(list[1])
+           def reads = file("$path/*_{R1,R2}_001.fastq.gz")
+           // def readsp = "$path/*{R1,R2}.trim.fastq.gz"
+           //  def R1 = file(list[2])
+           //    def R2 = file(list[3])
+           def message = '[INFO] '
+           log.info message
+           [ Sample, path, reads ]
 }
+
+
+
+
+
+/*
+ * STEP 2 - Trim Galore!
+ */
+//if(params.notrim){
+///    trimmed_reads = read_files_trimming
+//} else {
+process ngtrim {
+    tag "$Sample"
+    publishDir "$results_path/$Sample/$Sample", mode: 'copy'
+
+    cpus 8
+    executor 'sge'
+    penv 'smp'
+    clusterOptions '-l h_vmem=4G -l h_rt=24:00:00 -l athena=true'
+    scratch true
+
+    input:
+    set Sample, file(path), file(reads) from fastq
+
+    output:
+        set Sample, file(path), file('*_{1,2}.fastq.gz') into trimmed_reads
+        //file '*trimming_report.txt' into trimgalore_results
+        //file "*_fastqc.{zip,html}" into trimgalore_fastqc_reports
+
+    script:
+        def R1 = reads[0]
+        def R2 = reads[1]
+        """
+        NGmerge -n ${task.cpus} -a -1 $R1 -2 $R2 -o ${Sample}
+        """
+            }
+//}
+
+
 
 
 process bwamem {
@@ -199,7 +223,7 @@ process bwamem {
     scratch true
 
     input:
-    set Sample, file(path), file(reads) from fastq
+    set Sample, file(path), file(reads) from trimmed_reads
     file index from bwa_index.first()
         //file bwaref from bwa_index.collect()
         //file(bwaref) from bwaref
@@ -207,7 +231,6 @@ process bwamem {
     output:
     set Sample, file("${Sample}.bam") into newbam
 
-    script:
     """
     #!/bin/bash -l
     set -o pipefail
@@ -248,7 +271,7 @@ process processbam {
     set Sample, file("${Sample}*.pbc.qc") into pbcqc
     set Sample, file("${Sample}*.dup.qc") into dupqc
     file("*nsort.fixmate.bam") into fixmatebam
-    file("*window500.hist_data") into hist_data
+        // file("*window500.hist_data") into hist_data
     file("*window500.hist_graph.pdf") into fragsizes
     set Sample, file("${Sample}.nsorted.nodup.noM.bam") into nsortedbam
         // set Sample, file("${Sample}.sorted.nodup.noM.black.bam"), file("${Sample}.sorted.nodup.noM.black.bam.bai") into bamforsignal
@@ -336,6 +359,7 @@ process signalTrack {
 
     output:
     set Sample, file("${Sample}.sizefactors.bw") into insertionTrackbw
+    set Sample, file("${Sample}.sizefactors.bw") into insertionTrackBPMbw
 
     script:
     """
