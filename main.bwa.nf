@@ -37,8 +37,6 @@ params.email = 'ashley.doane@gmail.com'
 params.chromsizes = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chrom.sizes"
 params.lncaprefpeak = "$baseDir/data/lncapPeak.narrowPeak" 
 params.bcellrefpeak = "$baseDir/data/gcb.tn5.broadPeak" 
-params.bt2_index = params.genome ? params.genomes[ params.genome ].bt2 ?: false : false
-
 
 params.picardconfig="/athena/elementolab/scratch/asd2007/reference/hg38/picardmetrics.conf"
 
@@ -53,19 +51,6 @@ if( params.bwa_index ){
                               } else {
     exit 1, "No reference genome specified!"
 }
-
-
-if( params.bt2_index ){
-    bt2_index = Channel
-        .fromPath(params.bt2_index)
-        .ifEmpty { exit 1, "Bowtie2 index not found: ${params.bt2_index}" }
-} else if ( params.fasta ){
-    fasta = file(params.fasta)
-        if( !fasta.exists() ) exit 1, "Fasta file not found: ${params.fasta}"
-                                  } else {
-    exit 1, "No reference genome specified!"
-        }
-
 
 
 
@@ -130,30 +115,6 @@ if(!params.bwa_index && fasta){
 }
 
 
-
-/*
- * PREPROCESSING - Build Bt2 index
- */
-if(!params.bt2_index && fasta){
-    process makeBT2index {
-        tag fasta
-        publishDir path: { params.saveReference ? "${params.outdir}/reference_genome" : params.outdir },
-        saveAs: { params.saveReference ? it : null }, mode: 'copy'
-
-        input:
-        file fasta from fasta
-
-        output:
-        file "BWAIndex" into bwa_index
-
-        script:
-        """
-        spack load bowtie2
-        mkdir BT2Index
-        bowtie2-build $fasta genome
-        """
-    }
-}
 
 ////// Check input parameters //////
 
@@ -228,7 +189,7 @@ process ngtrim {
     cpus 8
     executor 'sge'
     penv 'smp'
-    clusterOptions '-l h_vmem=2G -l h_rt=24:00:00 -l athena=true'
+    clusterOptions '-l h_vmem=4G -l h_rt=24:00:00 -l athena=true'
     scratch true
 
     input:
@@ -243,7 +204,7 @@ process ngtrim {
         def R1 = reads[0]
         def R2 = reads[1]
         """
-        NGmerge -z -n ${task.cpus} -a -1 $R1 -2 $R2 -o ${Sample}
+        NGmerge -n ${task.cpus} -a -1 $R1 -2 $R2 -o ${Sample}
         """
             }
 //}
@@ -251,40 +212,36 @@ process ngtrim {
 
 
 
-
-
-process bt2 {
+process bwamem {
     tag "$Sample"
-        publishDir "$results_path/$Sample/$Sample", mode: 'copy'
+    publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
-        cpus 8
-        executor 'sge'
-        penv 'smp'
-        clusterOptions '-l h_vmem=4G -l h_rt=24:00:00 -l athena=true -R y'
-        scratch true
+    cpus 8
+    executor 'sge'
+    penv 'smp'
+    clusterOptions '-l h_vmem=4G -l h_rt=24:00:00 -l athena=true -R y'
+    scratch true
 
-        input:
-        set Sample, file(path), file(reads) from trimmed_reads
-        file index from bt2_index.first()
+    input:
+    set Sample, file(path), file(reads) from trimmed_reads
+    file index from bwa_index.first()
         //file bwaref from bwa_index.collect()
         //file(bwaref) from bwaref
 
-        output:
-        set Sample, file("${Sample}.bam") into newbam
-        file("${Sample}.bt2.log") into bt2log
-   
+    output:
+    set Sample, file("${Sample}.bam") into newbam
 
-        script:
-        def R1 = reads[0]
-        def R2 = reads[1]
-        """
-        #!/bin/bash -l
-        set -o pipefail
-        spack load bowtie2
-        spack load samtools
-        bowtie2 -X2000 --very-sensitive -x ${index}/genome -p \${NSLOTS} -1 ${R1} -2 ${R2} 2> ${Sample}.bt2.log | samtools view -bS -q 30 - > ${Sample}.bam
-        """
-        }
+    """
+    #!/bin/bash -l
+    set -o pipefail
+    spack load bwa
+    spack load samtools
+    bwa mem -t \${NSLOTS} -M ${index}/genome.fa $reads | samtools view -bS -q 30 - > ${Sample}.bam
+    """
+}
+
+
+
 
 
 
