@@ -3,3 +3,5 @@ data/Sample_Ly7_pooled_500k filter=lfs diff=lfs merge=lfs -text
 data/gcb.tn5.broadPeak filter=lfs diff=lfs merge=lfs -text
 data/lncapPeak.narrowPeak filter=lfs diff=lfs merge=lfs -text
 data/ly7sub filter=lfs diff=lfs merge=lfs -text
+data/Sample_oct2_2_s2test/oct2_2_s2test_S6_L001_R1_001.fastq.gz filter=lfs diff=lfs merge=lfs -text
+data/Sample_oct2_2_s2test/oct2_2_s2test_S6_L001_R2_001.fastq.gz filter=lfs diff=lfs merge=lfs -text
