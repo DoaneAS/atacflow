@@ -19,6 +19,7 @@ version = 1.2
 
 params.name = 'ecadd4547'
 params.index = 'sampleIndex.csv'
+params.outdir = "$baseDir/results"
 params.name = false
 params.project = false
 params.genome = 'hg38'
@@ -34,13 +35,13 @@ params.saveAlignedIntermediates = false
 params.broad = false
 params.outdir = './results'
 params.email = 'ashley.doane@gmail.com'
-params.chromsizes = "/athena/elementolab/scratch/asd2007/reference/hg38/hg38.chrom.sizes"
 params.lncaprefpeak = "$baseDir/data/lncapPeak.narrowPeak" 
 params.bcellrefpeak = "$baseDir/data/gcb.tn5.broadPeak" 
 params.bt2_index = params.genome ? params.genomes[ params.genome ].bt2 ?: false : false
-
-
-params.picardconfig="/athena/elementolab/scratch/asd2007/reference/hg38/picardmetrics.conf"
+params.species = params.genome ? params.genomes[ params.genome ].spec ?: false : false
+params.picardconfig = params.genome ? params.genomes[ params.genome ].picardconf ?: false : false
+params.chromsizes = params.genome ? params.genomes[ params.genome ].chrsz ?: false : false
+       //params.picardconfig="/athena/elementolab/scratch/asd2007/reference/hg38/picardmetrics.conf"
 
 
 if( params.bwa_index ){
@@ -101,11 +102,24 @@ log.info "===================================="
 index = file(params.index)
 
        //bwaref = file(params.ref)
-results_path = "./results"
+results_path = file(params.outdir)
 picardconf = file(params.picardconfig)
-blacklist=file(params.blacklist)
+blacklist = file(params.blacklist)
+bcellrefpeaks = file(params.bcellrefpeak)
+dnase = file(params.DNASE)
+encodedhs = file(params.ENCODEDHS)
+tssenrich = file(params.TSS_ENRICH)
+prom = file(params.PROM)
+enh = file(params.ENH)
+reg2map = file(params.REG2MAP)
+roadmapmeta = file(params.ROADMAP_META)
+ref = file(params.REF)
+blackqc = file(params.BLACK)
+encodedhs = file(params.ENCODEDHS)
+species = params.species
 
-/*
+
+ /*
  * PREPROCESSING - Build BWA index
  */
 if(!params.bwa_index && fasta){
@@ -165,35 +179,6 @@ if (!params.index) {
 sizefactors = Channel.from(1)
 
 
-
-       /*
- *atacs = Channel
- *       .from(index.readLines())
- *       .map { line ->
- *       def list = line.split()
- *              def bed = file(list[0])
- *              def peaks = file(list[1])
- *              def sname = list[2]
- *              def dprefix = file(list[3])
- *       println bed
- *       println peaks
- *       [ sname, bed, peaks, dprefix ]
- *}
- */
-
-
-
-bcellrefpeaks = file(params.bcellrefpeak)
-dnase = file(params.DNASE)
-encodedhs = file(params.ENCODEDHS)
-tssenrich = file(params.TSS_ENRICH)
-prom = file(params.PROM)
-enh = file(params.ENH)
-reg2map = file(params.REG2MAP)
-roadmapmeta = file(params.ROADMAP_META)
-ref = file(params.REF)
-blackqc = file(params.BLACK)
-encodedhs = file(params.ENCODEDHS)
 
 
 fastq = Channel
@@ -282,7 +267,7 @@ process bt2 {
         set -o pipefail
         spack load bowtie2
         spack load samtools
-        bowtie2 -X2000 --very-sensitive -x ${index}/genome -p \${NSLOTS} -1 ${R1} -2 ${R2} 2> ${Sample}.bt2.log | samtools view -bS -q 30 - > ${Sample}.bam
+        bowtie2 -X2000 --local -x ${index}/genome -p \${NSLOTS} -1 ${R1} -2 ${R2} 2> ${Sample}.bt2.log | samtools view -bS -q 30 - > ${Sample}.bam
         """
         }
 
@@ -346,7 +331,7 @@ process bam2bed {
     set Sample, file("${Sample}.nodup.tn5.tagAlign.gz") into finalbedqc
     set Sample, file("${Sample}.nodup.tn5.tagAlign.gz") into finalbed
     set Sample, file("${Sample}.nodup.bedpe.gz") into finalbedpe
-
+    set Sample, file("${Sample}.nodup.tn5.tagAlign.gz"), file("${Sample}.nodup.bedpe.gz") into finalbedmacs
 
     script:
     """
@@ -365,22 +350,32 @@ process callpeaks {
     publishDir  "$results_path/$Sample/$Sample", mode: 'copy'
 
     input:
-    set Sample, file(rbed) from finalbed
+    set Sample, file(rbed), file(rbedpe) from finalbedmacs
+    val sp from species
 
     output:
+
+    set Sample, file("${Sample}.narrowPeak") into narrowpeakfile
     set Sample, file("${Sample}.tn5.narrowPeak.gz") into narrowpeak
     set Sample, file("${Sample}.tag.narrow_summits.bed") into summits
     set Sample, file("${Sample}.tn5.broadPeak.gz") into broadpeak
     set Sample, file("${Sample}.tn5.broadPeak.gz") into broadpeakqc
+        // set Sample, file("${Sample}/pseudoreps/${Sample}.tn5.pooled.pf.pval0.1.500K.naive_overlap.narrowPeak.gz") into pooledpeaks
 
     script:
     """
-    macs2 callpeak -t ${rbed} -f BED -n ${Sample}.tag.narrow -g hs --nomodel --shift -75 --extsize 150 --keep-dup all --call-summits -p 1e-3
-    /home/asd2007/ATACseq/narrowpeak.py ${Sample}.tag.narrow_peaks.narrowPeak ${Sample}.tn5.narrowPeak 
+    #!/bin/bash -l
 
-    macs2 callpeak -t  ${rbed} -f BED -n ${Sample}.tag.broad -g hs --nomodel --shift -75 --extsize 150 --keep-dup all --broad --broad-cutoff 0.1
+    callbedpepeaks.sh ${rbed} ${Sample} ${sp}
 
-    /home/asd2007/ATACseq/broadpeak.py  ${Sample}.tag.broad_peaks.broadPeak ${Sample}.tn5.broadPeak 
+    ##callPeaks.sh ${rbedpe} 
+
+    ##macs2 callpeak -t ${rbed} -f BED -n ${Sample}.tag.narrow -g hs --nomodel --shift -75 --extsize 150 --keep-dup all --call-summits -p 1e-3
+    ##/home/asd2007/ATACseq/narrowpeak.py ${Sample}.tag.narrow_peaks.narrowPeak ${Sample}.tn5.narrowPeak 
+
+    ##macs2 callpeak -t  ${rbed} -f BED -n ${Sample}.tag.broad -g hs --nomodel --shift -75 --extsize 150 --keep-dup all --broad --broad-cutoff 0.1
+
+    ##/home/asd2007/ATACseq/broadpeak.py  ${Sample}.tag.broad_peaks.broadPeak ${Sample}.tn5.broadPeak 
     """
         }
 

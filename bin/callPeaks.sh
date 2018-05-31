@@ -2,6 +2,9 @@
 
 #Sample_TH29_3.narrow.p0.1_peaks.narrowPeak
 
+spack load bedtools2
+
+source activate idp2
 
 # ========================
 # Create pseudoReplicates
@@ -9,8 +12,8 @@
 FINAL_BEDPE_FILE=$1
 SAMPLE=$2
 SPEC=$3
-
-chrsz="/athena/elementolab/scratch/asd2007/Reference/hg19.chrom.sizes"
+chrsz=$4
+#chrsz="/athena/elementolab/scratch/asd2007/Reference/hg19.chrom.sizes"
 # Get total number of read pairs
 nlines=$( zcat ${FINAL_BEDPE_FILE} | wc -l  )
 nlines=$(( (nlines + 1) / 2  ))
@@ -23,6 +26,7 @@ nlines=$(( (nlines + 1) / 2  ))
 
 
 
+mkdir -p ${SAMPLE}
 mkdir -p ${SAMPLE}/pseudo_reps
 
 
@@ -33,7 +37,7 @@ zcat $FINAL_BEDPE_FILE | shuf | split -d -l $((nlines)) - $SAMPLE/pseudo_reps/$S
 awk 'BEGIN{OFS="\t"}{printf "%s\t%s\t%s\tN\t1000\t%s\n%s\t%s\t%s\tN\t1000\t%s\n",$1,$2,$3,$9,$4,$5,$6,$10}' "$SAMPLE/pseudo_reps/$SAMPLE.nodup.00" | \
     gzip -c > $SAMPLE/pseudo_reps/$SAMPLE.nodup.pr1.tagAlign.gz
 
-rm -f "$TMPDIR/$SAMPLE/pseudo_reps/$SAMPLE.nodup.00"
+rm -f "$SAMPLE/pseudo_reps/$SAMPLE.nodup.00"
 
 
 awk 'BEGIN{OFS="\t"}{printf "%s\t%s\t%s\tN\t1000\t%s\n%s\t%s\t%s\tN\t1000\t%s\n",$1,$2,$3,$9,$4,$5,$6,$10}' "$SAMPLE/pseudo_reps/$SAMPLE.nodup.01" | \
