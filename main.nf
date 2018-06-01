@@ -267,7 +267,7 @@ process bt2 {
         set -o pipefail
         spack load bowtie2
         spack load samtools
-        bowtie2 -X2000 --local -x ${index}/genome -p \${NSLOTS} -1 ${R1} -2 ${R2} 2> ${Sample}.bt2.log | samtools view -bS -q 30 - > ${Sample}.bam
+        bowtie2 -X2000 -x ${index}/genome -p \${NSLOTS} -1 ${R1} -2 ${R2} 2> ${Sample}.bt2.log | samtools view -bS -q 30 - > ${Sample}.bam
         """
         }
 
