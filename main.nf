@@ -40,7 +40,15 @@ params.bcellrefpeak = "$baseDir/data/gcb.tn5.broadPeak"
 params.bt2_index = params.genome ? params.genomes[ params.genome ].bt2 ?: false : false
 params.species = params.genome ? params.genomes[ params.genome ].spec ?: false : false
 params.picardconfig = params.genome ? params.genomes[ params.genome ].picardconf ?: false : false
-params.chromsizes = params.genome ? params.genomes[ params.genome ].chrsz ?: false : false
+params.DNASE = params.genome ? params.genomes[ params.genome ].DNASE ?: false : false
+params.TSS_ENRICH = params.genome ? params.genomes[ params.genome ].TSS_ENRICH ?: false : false
+params.PROM = params.genome ? params.genomes[ params.genome ].PROM ?: false : false
+params.ENH = params.genome ? params.genomes[ params.genome ].ENH ?: false : false
+params.REG2MAP = params.genome ? params.genomes[ params.genome ].REG2MAP ?: false : false
+params.ROADMAP_META = params.genome ? params.genomes[ params.genome ].ROADMAP_META ?: false : false
+params.REF = params.genome ? params.genomes[ params.genome ].REF ?: false : false
+
+
        //params.picardconfig="/athena/elementolab/scratch/asd2007/reference/hg38/picardmetrics.conf"
 
 
@@ -267,7 +275,7 @@ process bt2 {
         set -o pipefail
         spack load bowtie2
         spack load samtools
-        bowtie2 -X2000 -x ${index}/genome -p \${NSLOTS} -1 ${R1} -2 ${R2} 2> ${Sample}.bt2.log | samtools view -bS -q 30 - > ${Sample}.bam
+        bowtie2 -X2000 -x ${index}/genome --local -p \${NSLOTS} -1 ${R1} -2 ${R2} 2> ${Sample}.bt2.log | samtools view -bS -q 30 - > ${Sample}.bam
         """
         }
 
@@ -385,9 +393,10 @@ process signalTrack {
 
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
-        // executor 'sge'
-        // clusterOptions '-l h_vmem=5G -pe smp 8 -l h_rt=10:00:00 -l athena=true'
-        // scratch true
+    executor 'sge'
+    clusterOptions '-l h_vmem=5G -l h_rt=46:00:00 -l athena=true'
+    penv 'smp'
+    scratch true
     cpus 8
 
     input:
@@ -396,11 +405,13 @@ process signalTrack {
 
 
     output:
-    set Sample, file("${Sample}.sizefactors.bw") into insertionTrackbw
-    set Sample, file("${Sample}.sizefactors.bw") into insertionTrackBPMbw
+    set Sample, file("${Sample}.bpm.sizefactors.bw") into insertionTrackbw
+    set Sample, file("${Sample}.bpm.sizefactors.bw") into insertionTrackBPMbw
 
     script:
     """
+    #!/bin/bash -l
+
     getbamcov.sh ${sbam} ${Sample} ${task.cpus}
 
     """
