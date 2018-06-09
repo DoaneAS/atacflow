@@ -22,7 +22,7 @@ params.index = 'sampleIndex.csv'
 params.outdir = "$baseDir/results"
 params.name = false
 params.project = false
-params.genome = 'hg38'
+       //params.genome = 'hg38'
 params.genomes = []
 params.fasta = params.genome ? params.genomes[ params.genome ].fasta ?: false : false
 params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
@@ -47,8 +47,9 @@ params.ENH = params.genome ? params.genomes[ params.genome ].ENH ?: false : fals
 params.REG2MAP = params.genome ? params.genomes[ params.genome ].REG2MAP ?: false : false
 params.ROADMAP_META = params.genome ? params.genomes[ params.genome ].ROADMAP_META ?: false : false
 params.REF = params.genome ? params.genomes[ params.genome ].REF ?: false : false
-
-
+params.REG2MAP_BED = params.genome ? params.genomes[ params.genome ].REG2MAP_BED ?: false : false
+params.chrsz = params.genome ? params.genomes[ params.genome ].chrsz ?: false : false
+params.encodedhs = params.genome ? params.genomes[ params.genome ].ENCODEDHS ?: false : false
        //params.picardconfig="/athena/elementolab/scratch/asd2007/reference/hg38/picardmetrics.conf"
 
 
@@ -115,15 +116,17 @@ picardconf = file(params.picardconfig)
 blacklist = file(params.blacklist)
 bcellrefpeaks = file(params.bcellrefpeak)
 dnase = file(params.DNASE)
-encodedhs = file(params.ENCODEDHS)
 tssenrich = file(params.TSS_ENRICH)
 prom = file(params.PROM)
 enh = file(params.ENH)
 reg2map = file(params.REG2MAP)
+reg2mapbed = file(params.REG2MAP_BED)
 roadmapmeta = file(params.ROADMAP_META)
 ref = file(params.REF)
-blackqc = file(params.BLACK)
-encodedhs = file(params.ENCODEDHS)
+blackqc = file(params.black)
+black = file(params.black)
+encodedhs = file(params.encodedhs)
+chrsz = file(params.chrsz)
 species = params.species
 
 
@@ -264,7 +267,7 @@ process bt2 {
 
         output:
         set Sample, file("${Sample}.bam") into newbam
-        file("${Sample}.bt2.log") into bt2log
+        set Sample, file("${Sample}.bt2.log") into bt2log
    
 
         script:
@@ -393,11 +396,14 @@ process signalTrack {
 
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
+
     executor 'sge'
-    clusterOptions '-l h_vmem=5G -l h_rt=46:00:00 -l athena=true'
     penv 'smp'
+    memory { 4.GB * task.attempt }
+    clusterOptions '-l h_rt=48:00:00 -l athena=true'
     scratch true
     cpus 8
+    errorStrategy { task.exitStatus == 140 ? 'retry' : 'terminate' }
 
     input:
     set Sample, file(sbam) from bamforsignal
@@ -406,7 +412,6 @@ process signalTrack {
 
     output:
     set Sample, file("${Sample}.bpm.sizefactors.bw") into insertionTrackbw
-    set Sample, file("${Sample}.bpm.sizefactors.bw") into insertionTrackBPMbw
 
     script:
     """
@@ -490,6 +495,7 @@ finalbamforqc.mix(nsortedbamforqc)
     .mix(pbcqc)
     .mix(dupqc)
     .mix(frips)
+    .mix(bt2log)
     .groupTuple(sort: true)
     .view()
     .set{ qcin }
@@ -512,6 +518,7 @@ process atacqc {
     file(roadmapmeta) from roadmapmeta
     file(ref) from ref
     file(black) from blackqc
+    file(reg2mapbed) from reg2mapbed
 
     output:
     set Sample, file("${Sample}*.preseq.log"), file("${Sample}*_qc.txt"), file("${Sample}*large_vplot.png"), file("${Sample}*vplot.png"), file("${Sample}_qc.trad.txt"), file("${Sample}*qc.html"), file("*qc.save") into qcdat
@@ -520,8 +527,7 @@ process atacqc {
 
     script:
     """
-    #!/bin/bash
-    source activate bds_atac
+    #!/bin/bash -l
 
     OUTPREFIX=${Sample}
     INPREFIX=${Sample}
@@ -534,7 +540,7 @@ process atacqc {
     samtools index -@4 ${Sample}.sorted.bam
 
 
-    python ${baseDir}/bin/run_ataqc.athena.py --workdir \$PWD  \\
+    source activate bds_atac && python ${baseDir}/bin/run_ataqc.athena.py --workdir \$PWD  \\
     --outdir \$PWD \\
     --outprefix ${Sample} \\
     --genome hg38 \\
@@ -544,6 +550,7 @@ process atacqc {
     --prom ${prom} \\
     --enh ${enh} \\
     --reg2map ${reg2map} \\
+    --reg2map_bed ${reg2mapbed} \\
     --meta ${roadmapmeta} \\
     --alignedbam ${Sample}.sorted.bam  \\
     --alignmentlog ${Sample}.align.log \\
@@ -552,7 +559,7 @@ process atacqc {
     --pbc ${Sample}.pbc.qc \\
     --finalbam ${Sample}.sorted.nodup.noM.black.bam \\
     --finalbed ${Sample}.nodup.tn5.tagAlign.gz \\
-    --bigwig ${Sample}.sizefactors.bw \\
+    --bigwig ${Sample}.bpm.sizefactors.bw \\
     --peaks ${Sample}.tn5.broadPeak.gz \\
     --naive_overlap_peaks ${Sample}.tn5.broadPeak.gz \\
     --idr_peaks ${Sample}.tn5.broadPeak.gz  --processes ${task.cpus}

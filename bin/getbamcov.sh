@@ -9,13 +9,13 @@ fi
 spack load samtools
 
 samtools index ${sbam}
-source activate deep
+source activate deepsge
 
 
 bamCoverage --bam ${sbam} --binSize 5 --outFileFormat bigwig --smoothLength 60 \
             --normalizeUsing BPM \
             --maxFragmentLength 150 \
-            -o ${outprefix}.sizefactors.bpm.bw --centerReads --extendReads --numberOfProcessors "${NSLOTS}"
+            -o ${outprefix}.bpm.sizefactors.bw --centerReads --extendReads --numberOfProcessors "${NSLOTS}"
 
 
 source deactivate
