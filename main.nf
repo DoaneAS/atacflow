@@ -221,7 +221,7 @@ process ngtrim {
     tag "$Sample"
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
-    cpus 8
+    cpus 4
     executor 'sge'
     penv 'smp'
     clusterOptions '-l h_vmem=2G -l h_rt=24:00:00 -l athena=true'
@@ -252,6 +252,7 @@ process ngtrim {
 process bt2 {
     tag "$Sample"
         publishDir "$results_path/$Sample/$Sample", mode: 'copy'
+        //conda 'bowtie2 samtools'
 
         cpus 8
         executor 'sge'
@@ -276,8 +277,8 @@ process bt2 {
         """
         #!/bin/bash -l
         set -o pipefail
-        spack load bowtie2
-        spack load samtools
+        ##spack load bowtie2
+        ##spack load samtools
         bowtie2 -X2000 -x ${index}/genome --local -p \${NSLOTS} -1 ${R1} -2 ${R2} 2> ${Sample}.bt2.log | samtools view -bS -q 30 - > ${Sample}.bam
         """
         }
@@ -320,6 +321,7 @@ process processbam {
     """
     #!/bin/bash -l
     set -o pipefail
+    . ~/.spackloads.sh
     processAlignment.nf.sh ${nbam} ${BLACK} 8
     """
 }
