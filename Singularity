@@ -11,7 +11,7 @@ From: intelpython/intelpython2_full:latest
   conda config --add channels defaults
   conda config --add channels conda-forge
   conda config --add channels bioconda
-  conda install  -y -q cython scipy samtools pysam matplotlib
+  conda install  -y cython scipy samtools pysam matplotlib python=2
   
   pip --no-cache-dir install \
         git+https://github.com/GreenleafLab/NucleoATAC.git
