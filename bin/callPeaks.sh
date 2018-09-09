@@ -2,9 +2,9 @@
 
 #Sample_TH29_3.narrow.p0.1_peaks.narrowPeak
 
-spack load bedtools2
+spack load bedtools2@2.27
 
-source activate idp2
+conda activate idp2
 
 # ========================
 # Create pseudoReplicates

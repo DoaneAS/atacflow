@@ -1,9 +1,7 @@
-#!/home/asd2007/miniconda3/envs/atacFlow/bin/python
+#!/usr/bin/env python2
 
-####!/usr/bin/env python2
-
-# Ashley Doane, Elemento Lab
-# adapted from: Daniel Kim, CS Foo
+# Daniel Kim, CS Foo
+# 2016-03-28
 # Script to run ataqc, all parts
 
 import matplotlib
@@ -25,11 +23,7 @@ import scipy.stats
 import argparse
 import logging
 import re
-import yaml
-
-##import backports.functools_lru_cache
-
-
+import signal
 
 from base64 import b64encode
 from collections import namedtuple
@@ -39,6 +33,47 @@ from scipy.signal import find_peaks_cwt
 from jinja2 import Template
 from matplotlib import pyplot as plt
 from matplotlib import mlab
+from encode_common_genomic import *
+
+
+# utils
+
+def run_shell_cmd(cmd): 
+    """Taken from ENCODE DCC ATAC pipeline
+    """
+    print(cmd)
+    try:
+        p = subprocess.Popen(cmd, shell=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            universal_newlines=True,
+            preexec_fn=os.setsid)
+        pid = p.pid
+        pgid = os.getpgid(pid)
+        ret = ''
+        while True:
+            line = p.stdout.readline()
+            if line=='' and p.poll() is not None:
+                break
+            # log.debug('PID={}: {}'.format(pid,line.strip('\n')))
+            #print('PID={}: {}'.format(pid,line.strip('\n')))
+            ret += line
+        p.communicate() # wait here
+        if p.returncode > 0:
+            raise subprocess.CalledProcessError(
+                p.returncode, cmd)
+        return ret.strip('\n')
+    except:
+        # kill all child processes
+        os.killpg(pgid, signal.SIGKILL)
+        p.terminate()
+        raise Exception('Unknown exception caught. PID={}'.format(pid))
+
+def get_num_lines(f):
+    """Taken from ENCODE DCC ATAC pipeline
+    """
+    cmd = 'zcat -f {} | wc -l'.format(f)
+    return int(run_shell_cmd(cmd))
 
 
 # QC STUFF
@@ -129,25 +164,25 @@ def determine_paired(bam_file):
         return "Single-ended"
 
 
-##def get_read_length(fastq_file):
-##    '''
-##    Get read length out of fastq file
-##    '''
-##    total_reads_to_consider = 1000000
-##    line_num = 0
-##    total_reads_considered = 0
-##    max_length = 0
-##    with getFileHandle(fastq_file, 'rb') as fp:
-##        for line in fp:
-##            if line_num % 4 == 1:
-##                if len(line.strip()) > max_length:
-##                    max_length = len(line.strip())
-##                total_reads_considered += 1
-##            if total_reads_considered >= total_reads_to_consider:
-##                break
-##            line_num += 1
-##
-##    return int(max_length)
+def get_read_length(fastq_file):
+    '''
+    Get read length out of fastq file
+    '''
+    total_reads_to_consider = 1000000
+    line_num = 0
+    total_reads_considered = 0
+    max_length = 0
+    with getFileHandle(fastq_file, 'rb') as fp:
+        for line in fp:
+            if line_num % 4 == 1:
+                if len(line.strip()) > max_length:
+                    max_length = len(line.strip())
+                total_reads_considered += 1
+            if total_reads_considered >= total_reads_to_consider:
+                break
+            line_num += 1
+
+    return int(max_length)
 
 
 def get_bowtie_stats(bowtie_alignment_log):
@@ -192,7 +227,8 @@ def get_gc(qsorted_bam_file, reference_fasta, prefix):
     output_file = '{0}_gc.txt'.format(prefix)
     plot_file = '{0}_gcPlot.pdf'.format(prefix)
     summary_file = '{0}_gcSummary.txt'.format(prefix)
-    get_gc_metrics = ('picard '
+    get_gc_metrics = ('java -Xmx4G -jar '
+                      '{5} '
                       'CollectGcBiasMetrics R={0} I={1} O={2} '
                       'VERBOSITY=ERROR QUIET=TRUE '
                       'ASSUME_SORTED=FALSE '
@@ -200,7 +236,8 @@ def get_gc(qsorted_bam_file, reference_fasta, prefix):
                                                 qsorted_bam_file,
                                                 output_file,
                                                 plot_file,
-                                                summary_file)
+                                                summary_file,
+                                                locate_picard())
     logging.info(get_gc_metrics)
     os.system(get_gc_metrics)
     return output_file, plot_file, summary_file
@@ -211,11 +248,7 @@ def plot_gc(data_file):
     Replot the Picard output as png file to put into the html
     '''
     # Load data
-    with open(data_file) as fp:
-        for line in fp:
-            if line.startswith('## METRICS'):
-                break
-        data = np.loadtxt(fp, skiprows=1)
+    data = pd.read_table(data_file, comment="#")
 
     # Plot the data
     fig = plt.figure()
@@ -223,17 +256,17 @@ def plot_gc(data_file):
 
     plt.xlim((0, 100))
 
-    lin1 = ax.plot(data[:, 0], data[:, 4],
+    lin1 = ax.plot(data['GC'], data['NORMALIZED_COVERAGE'],
                    label='Normalized coverage', color='r')
     ax.set_ylabel('Normalized coverage')
 
     ax2 = ax.twinx()
-    lin2 = ax2.plot(data[:, 0], data[:, 3],
+    lin2 = ax2.plot(data['GC'], data['MEAN_BASE_QUALITY'],
                     label='Mean base quality at GC%', color='b')
     ax2.set_ylabel('Mean base quality at GC%')
 
     ax3 = ax.twinx()
-    lin3 = ax3.plot(data[:, 0], data[:, 1]/np.sum(data[:, 1]),
+    lin3 = ax3.plot(data['GC'], data['WINDOWS']/np.sum(data['WINDOWS']),
                     label='Windows at GC%', color='g')
     ax3.get_yaxis().set_visible(False)
 
@@ -254,18 +287,18 @@ def run_preseq(bam_w_dups, prefix):
     # First sort because this file no longer exists...
     sort_bam = 'samtools sort -o {1}.sorted.bam -T {1} -@ 2 {0}'.format(
         bam_w_dups, prefix)
-   # os.system(sort_bam)
+    os.system(sort_bam)
 
     logging.info('Running preseq...')
     preseq_data = '{0}.preseq.dat'.format(prefix)
     preseq_log = '{0}.preseq.log'.format(prefix)
     preseq = ('preseq lc_extrap '
-              '-P -B -o {0} {1}.sorted.bam -v 2> {2}').format(preseq_data,
+              '-P -B -o {0} {1}.sorted.bam -seed 1 -v 2> {2}').format(preseq_data,
                                                               prefix,
                                                               preseq_log)
     logging.info(preseq)
     os.system(preseq)
-    #os.system('rm {0}.sorted.bam'.format(prefix))
+    os.system('rm {0}.sorted.bam'.format(prefix))
     return preseq_data, preseq_log
 
 
@@ -325,27 +358,27 @@ def get_picard_complexity_metrics(aligned_bam, prefix):
     '''
     out_file = '{0}.picardcomplexity.qc'.format(prefix)
     get_gc_metrics = ('java -Xmx4G -jar '
-                      '{2}/picard.jar '
+                      '{2} '
                       'EstimateLibraryComplexity INPUT={0} OUTPUT={1} '
                       'VERBOSITY=ERROR '
                       'QUIET=TRUE').format(aligned_bam,
                                            out_file,
-                                           os.environ['PICARDROOT'])
-    if not os.path.exists(out_file):
-        os.system(get_gc_metrics)
+                                           locate_picard())
+    os.system(get_gc_metrics)
+
     # Extract the actual estimated library size
     header_seen = False
     est_library_size = 0
-
     with open(out_file, 'rb') as fp:
         for line in fp:
             if header_seen:
-                est_library_size = int(line.strip().split()[-1])
+                est_library_size = int(float(line.strip().split()[-1]))
                 break
             if 'ESTIMATED_LIBRARY_SIZE' in line:
                 header_seen = True
 
     return est_library_size
+
 
 def preseq_plot(data_file):
     '''
@@ -377,21 +410,21 @@ def preseq_plot(data_file):
     return b64encode(plot_img.getvalue())
 
 
-def make_vplot(bam_file, tss, prefix, genome, read_len, bins=400, bp_edge=2000,
-               processes=4, greenleaf_norm=True):
+def make_tss_plot(bam_file, tss, prefix, chromsizes, read_len, bins=400, bp_edge=2000,
+                  processes=8, greenleaf_norm=True):
     '''
-    Take bootstraps, generate V-plots, and get a mean and
+    Take bootstraps, generate tss plots, and get a mean and
     standard deviation on the plot. Produces 2 plots. One is the
     aggregation plot alone, while the other also shows the signal
     at each TSS ordered by strength.
     '''
-    logging.info('Generating vplot...')
-    vplot_file = '{0}_vplot.png'.format(prefix)
-    vplot_large_file = '{0}_large_vplot.png'.format(prefix)
+    logging.info('Generating tss plot...')
+    tss_plot_file = '{0}_tss-enrich.png'.format(prefix)
+    tss_plot_large_file = '{0}_large_tss-enrich.png'.format(prefix)
 
     # Load the TSS file
     tss = pybedtools.BedTool(tss)
-    tss_ext = tss.slop(b=bp_edge, genome=genome)
+    tss_ext = tss.slop(b=bp_edge, g=chromsizes)
 
     # Load the bam file
     bam = metaseq.genomic_signal(bam_file, 'bam') # Need to shift reads and just get ends, just load bed file?
@@ -434,7 +467,7 @@ def make_vplot(bam_file, tss, prefix, genome, read_len, bins=400, bp_edge=2000,
     ax.set_ylabel('Average read coverage (per million mapped reads)')
     ax.legend(loc='best')
 
-    fig.savefig(vplot_file)
+    fig.savefig(tss_plot_file)
 
     # Print a more complicated plot with lots of info
 
@@ -453,9 +486,9 @@ def make_vplot(bam_file, tss, prefix, genome, read_len, bins=400, bp_edge=2000,
                                    sort_by=bam_array.mean(axis=1))
 
     # And save the file
-    fig.savefig(vplot_large_file)
+    fig.savefig(tss_plot_large_file)
 
-    return vplot_file, vplot_large_file, tss_point_val
+    return tss_plot_file, tss_plot_large_file, tss_point_val
 
 
 def get_picard_dup_stats(picard_dup_file, paired_status):
@@ -474,11 +507,11 @@ def get_picard_dup_stats(picard_dup_file, paired_status):
 
             if mark == 2:
                 line_elems = line.strip().split('\t')
-                dup_stats['PERCENT_DUPLICATION'] = line_elems[8]
-                dup_stats['READ_PAIR_DUPLICATES'] = line_elems[6]
+                dup_stats['PERCENT_DUPLICATION'] = line_elems[7]
+                dup_stats['READ_PAIR_DUPLICATES'] = line_elems[5]
                 dup_stats['READ_PAIRS_EXAMINED'] = line_elems[2]
                 if paired_status == 'Paired-ended':
-                    return float(line_elems[6]), float(line_elems[8])
+                    return float(line_elems[5]), float(line_elems[7])
                 else:
                     return float(line_elems[4]), float(line_elems[7])
 
@@ -494,6 +527,7 @@ def get_sambamba_dup_stats(sambamba_dup_file, paired_status):
     logging.info('Running sambamba markdup...')
     with open(sambamba_dup_file, 'r') as fp:
         lines = fp.readlines()
+
     end_pairs = int(lines[1].strip().split()[1])
     single_ends = int(lines[2].strip().split()[1])
     ends_marked_dup = int(lines[4].strip().split()[1])
@@ -517,34 +551,33 @@ def get_mito_dups(sorted_bam, prefix, endedness='Paired-ended', use_sambamba=Fal
 
     out_file = '{0}.dupmark.ataqc.bam'.format(prefix)
     metrics_file = '{0}.dup.ataqc'.format(prefix)
-    #out_file = '{0}.dupmark.bam'.format(prefix)
-    #metrics_file = '{0}.dup.qc'.format(prefix)
 
     # Filter bam on the flag 0x002
     tmp_filtered_bam = '{0}.filt.bam'.format(prefix)
     tmp_filtered_bam_prefix = tmp_filtered_bam.replace('.bam', '')
     if endedness == 'Paired-ended':
         filter_bam = ('samtools view -F 1804 -f 2 -u {0} | '
-                      'samtools sort - -o {1}'.format(sorted_bam, tmp_filtered_bam))
+                      'samtools sort - {1}'.format(sorted_bam, tmp_filtered_bam_prefix))
     else:
         filter_bam = ('samtools view -F 1804 -u {0} | '
                       'samtools sort - {1}'.format(sorted_bam, tmp_filtered_bam_prefix))
     os.system(filter_bam)
 
     # Run Picard MarkDuplicates
-    mark_duplicates = ('picard '
-                       'MarkDuplicates INPUT={0} OUTPUT={1} '
-                       'METRICS_FILE={2} '
+    mark_duplicates = ('java -Xmx4G -jar '
+                       '{0} '
+                       'MarkDuplicates INPUT={1} OUTPUT={2} '
+                       'METRICS_FILE={3} '
                        'VALIDATION_STRINGENCY=LENIENT '
                        'ASSUME_SORTED=TRUE '
                        'REMOVE_DUPLICATES=FALSE '
                        'VERBOSITY=ERROR '
-                       'TMP_DIR="$TMPDIR" '
-                       'QUIET=TRUE').format(tmp_filtered_bam,
+                       'QUIET=TRUE').format(locate_picard(),
+                                            tmp_filtered_bam,
                                             out_file,
                                             metrics_file)
     if use_sambamba:
-        mark_duplicates = ('sambamba markdup -t "$NSLOTS" '
+        mark_duplicates = ('sambamba markdup -t 8 '
                            '--hash-table-size=17592186044416 '
                            '--overflow-list-size=20000000 '
                            '--io-buffer-size=256 '
@@ -570,14 +603,13 @@ def get_mito_dups(sorted_bam, prefix, endedness='Paired-ended', use_sambamba=Fal
 
     # Clean up
     remove_bam = 'rm {0}'.format(out_file)
-    #os.system(remove_bam)
+    os.system(remove_bam)
     remove_metrics_file = 'rm {0}'.format(metrics_file)
-    #os.system(remove_metrics_file)
+    os.system(remove_metrics_file)
     remove_tmp_filtered_bam = 'rm {0}'.format(tmp_filtered_bam)
-  #  os.system(remove_tmp_filtered_bam)
+    os.system(remove_tmp_filtered_bam)
 
     return mito_dups, float(mito_dups) / total_dups
-
 
 
 def get_samtools_flagstat(bam_file):
@@ -585,9 +617,9 @@ def get_samtools_flagstat(bam_file):
     Runs samtools flagstat to get read metrics
     '''
     logging.info('samtools flagstat...')
-    results = pysam.flagstat(bam_file)
+    results = pysam.flagstat(bam_file, split_lines=True)
     flagstat = ''
-    for line in results.split("\n"):
+    for line in results:
         logging.info(line.strip())
         flagstat += line
         if "mapped" in line and "mate" not in line:
@@ -638,15 +670,21 @@ def get_insert_distribution(final_bam, prefix):
     logging.info('insert size distribution...')
     insert_data = '{0}.inserts.hist_data.log'.format(prefix)
     insert_plot = '{0}.inserts.hist_graph.pdf'.format(prefix)
-    graph_insert_dist = ('picard '
+    graph_insert_dist = ('java -Xmx4G -jar '
+                         '{3} '
                          'CollectInsertSizeMetrics '
-                         'INPUT={0} OUTPUT={1} H={2} ').format(final_bam, insert_data, insert_plot)
+                         'INPUT={0} OUTPUT={1} H={2} '
+                         'VERBOSITY=ERROR QUIET=TRUE '
+                         'W=1000 STOP_AFTER=5000000').format(final_bam,
+                                                             insert_data,
+                                                             insert_plot,
+                                                             locate_picard())
     logging.info(graph_insert_dist)
     os.system(graph_insert_dist)
     return insert_data, insert_plot
 
 
-def get_fract_reads_in_regions(reads_bed, regions_bed):
+def get_fract_reads_in_regions_old(reads_bed, regions_bed):
     '''
     Function that takes in bed file of reads and bed file of regions and
     gets fraction of reads sitting in said regions
@@ -654,7 +692,7 @@ def get_fract_reads_in_regions(reads_bed, regions_bed):
     reads_bedtool = pybedtools.BedTool(reads_bed)
     regions_bedtool = pybedtools.BedTool(regions_bed)
 
-    reads = regions_bedtool.intersect(reads_bedtool, c=True)
+    reads = regions_bedtool.sort().merge().intersect(reads_bedtool, c=True, nonamecheck=True)
 
     read_count = 0
     for interval in reads:
@@ -662,6 +700,25 @@ def get_fract_reads_in_regions(reads_bed, regions_bed):
     fract_reads = float(read_count)/reads_bedtool.count()
 
     return read_count, fract_reads
+
+
+def get_fract_reads_in_regions(reads_bed, regions_bed):
+    """Function that takes in bed file of reads and bed file of regions and
+    gets fraction of reads sitting in said regions
+    """
+    # uses new run_shell_cmd
+    cmd = "bedtools sort -i {}  | "
+    cmd += "bedtools merge -i stdin | "
+    cmd += "bedtools intersect -u -nonamecheck -a {} -b stdin | "
+    cmd += "wc -l"
+    #cmd += "bedtools intersect -c -nonamecheck -a stdin -b {} | "
+    #cmd += "awk '{{ sum+=$4 }} END {{ print sum }}'"
+    cmd = cmd.format(regions_bed, reads_bed)
+    intersect_read_count = int(run_shell_cmd(cmd))
+    total_read_count = get_num_lines(reads_bed)
+    fract_reads = float(intersect_read_count) / total_read_count
+
+    return intersect_read_count, fract_reads
 
 
 def get_signal_to_noise(final_bed, dnase_regions, blacklist_regions,
@@ -916,7 +973,7 @@ def compare_to_roadmap(bw_file, regions_file, reg2map_file,
 
     # Plot results
     pos = np.array(range(ncol)) + 0.5
-    fig = plt.figure()
+    fig = plt.figure(figsize=(5,int(ncol/4)))
     plt.barh(pos, sorted_results['corr'], align='center', height=1.0)
     plt.yticks(pos, sorted_results['mnemonic'].tolist(), fontsize=7)
     plt.xlabel('Spearmans correlation')
@@ -1052,7 +1109,9 @@ if your file is paired end, then you should divide these counts by two.
 
 
   <h2>Alignment statistics</h2>
+  <h3>Bowtie alignment log</h3>
   <pre>
+{{ sample['bowtie_stats'] }}
   </pre>
 
   <h3>Samtools flagstat</h3>
@@ -1165,6 +1224,16 @@ fragment length distribution and will show specific peak ratios.
 
   <h3>IDR peak file statistics</h3>
 
+  <table class='qc_table'>
+    <tbody>
+      {% for field, value in sample['idr_peak_summ'].iteritems() %}
+      <tr>
+        <td>{{ field }}</td>
+        <td>{{ value }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
 
   {{ inline_img(sample['idr_peak_dist']) }}
 
@@ -1238,46 +1307,26 @@ def parse_args():
     '''
     Set up the package to be run from the command line
     '''
+
     parser = argparse.ArgumentParser(description='ATAC-seq QC package')
+
     # Directories and prefixes
+    parser.add_argument('--workdir', help='Working directory')
+    parser.add_argument('--outdir', help='Output directory')
+    parser.add_argument('--outprefix', help='Output prefix')
 
-    parser.add_argument('--workdir')#default=os.path.join(os.environ.get('${PWD}', None),os.environ.get('$Sample',None )))
-    parser.add_argument('--outdir', default="qc")
-    parser.add_argument('--outprefix', help='Output prefix')# default=os.environ.get('Sample', None))
     # Annotation files
-    parser.add_argument('--genome', help='Genome build used', default="hg38")
-    parser.add_argument('--ref', help='Reference fasta file', default="/athena/elementolab/scratch/asd2007/reference/hg38/GRCh38_no_alt_analysis_set_GCA_000001405.15.fasta")
-    parser.add_argument('--tss', help='TSS file', default="/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/hg38_gencode_tss_unique.bed.gz")
-    parser.add_argument('--dnase', help='Open chromatin region file', default="/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/reg2map_honeybadger2_dnase_all_p10_ucsc.hg19_to_hg38.bed.gz")
-    parser.add_argument('--blacklist',  help='Blacklisted region file', default="/athena/elementolab/scratch/asd2007/reference/hg38/hg38.blacklist.bed.gz")
-    parser.add_argument('--prom', help='Promoter region file', default="/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/reg2map_honeybadger2_dnase_prom_p2.hg19_to_hg38.bed.gz")
-    parser.add_argument('--enh', help='Enhancer region file', default="/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/reg2map_honeybadger2_dnase_enh_p2.hg19_to_hg38.bed.gz")
-    parser.add_argument('--reg2map_bed', help='file of regions used to generate reg2map signals', default="/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/hg38_celltype_compare_subsample.bed.gz")
-    parser.add_argument('--reg2map', default="/athena/elementolab/scratch/asd2007/reference/hg38_ENCODE/ataqc/hg38_dnase_avg_fseq_signal_formatted.txt.gz")
-    parser.add_argument('--meta', help='Roadmap metadata', default="/athena/elementolab/scratch/asd2007/reference/hg38/ataqc/hg38_dnase_avg_fseq_signal_metadata.txt")
-    
-    # Choose which mode
-   # parser.add_argument('--pipeline',
-   #                     default=None,
-   #                     help='Specific pipeline was used')
-
-
-   # # Directories and prefixes
-   # parser.add_argument('--workdir', help='Working directory')
-   # parser.add_argument('--outdir', help='Output directory')
-   # parser.add_argument('--outprefix', help='Output prefix')
-
-   # # Annotation files
-   # parser.add_argument('--genome', help='Genome build used')
-   # parser.add_argument('--ref', help='Reference fasta file')
-   # parser.add_argument('--tss', help='TSS file')
-   # parser.add_argument('--dnase', help='Open chromatin region file')
-   # parser.add_argument('--blacklist', help='Blacklisted region file')
-   # parser.add_argument('--prom', help='Promoter region file')
-   # parser.add_argument('--enh', help='Enhancer region file')
-   # parser.add_argument('--reg2map_bed', help='file of regions used to generate reg2map signals')
-   # parser.add_argument('--reg2map', help='file with cell type signals')
-   # parser.add_argument('--meta', help='Roadmap metadata')
+    parser.add_argument('--genome', help='Genome build used')
+    parser.add_argument('--chromsizes', help='chromsizes file')
+    parser.add_argument('--ref', help='Reference fasta file')
+    parser.add_argument('--tss', help='TSS file')
+    parser.add_argument('--dnase', help='Open chromatin region file')
+    parser.add_argument('--blacklist', help='Blacklisted region file')
+    parser.add_argument('--prom', help='Promoter region file')
+    parser.add_argument('--enh', help='Enhancer region file')
+    parser.add_argument('--reg2map_bed', help='file of regions used to generate reg2map signals')
+    parser.add_argument('--reg2map', help='file with cell type signals')
+    parser.add_argument('--meta', help='Roadmap metadata')
 
     # Choose which mode
     parser.add_argument('--pipeline',
@@ -1285,16 +1334,16 @@ def parse_args():
                         help='Specific pipeline was used')
 
     # Mode 1: Provide an input prefix
-   # parser.add_argument('--inprefix',
-   #                     default='test',
-    #                    help='Input file prefix')
+    parser.add_argument('--inprefix',
+                        default='test',
+                        help='Input file prefix')
 
     # Mode 2: Define every possible QC file
- #   parser.add_argument('--fastq1',
- #                       help='First set of reads if paired end, \
-  #                            or the single end reads')
-   # parser.add_argument('--fastq2',
-   #                     help='Second set of reads if paired end')
+    parser.add_argument('--fastq1',
+                        help='First set of reads if paired end, \
+                              or the single end reads')
+    parser.add_argument('--fastq2',
+                        help='Second set of reads if paired end')
     parser.add_argument('--alignedbam', help='BAM file from the aligner')
     parser.add_argument('--alignmentlog', help='Alignment log')
     parser.add_argument('--coordsortbam', help='BAM file sorted by coordinate')
@@ -1308,21 +1357,23 @@ def parse_args():
     parser.add_argument('--peaks',
                         help='Peak file')
     parser.add_argument('--naive_overlap_peaks',
-                         help='Naive overlap peak file')
-    parser.add_argument('--idr_peaks')
+                        default=None, help='Naive overlap peak file')
+    parser.add_argument('--idr_peaks',
+                        default=None, help='IDR peak file')
     parser.add_argument('--use_sambamba_markdup', action='store_true',
                         help='Use sambamba markdup instead of Picard')
-    parser.add_argument('--processes', default=4)
+
     args = parser.parse_args()
 
     # Set up all variables
-    INPUT_PREFIX = os.path.join(args.workdir, args.outprefix)
-    OUTPUT_PREFIX = os.path.join(args.workdir, args.outprefix)
+    INPUT_PREFIX = os.path.join(args.workdir, args.inprefix)
+    OUTPUT_PREFIX = os.path.join(args.outdir, args.outprefix)
     os.system('mkdir -p {0}'.format(args.outdir))
     NAME = args.outprefix
 
     # Set up annotations
     GENOME = args.genome
+    CHROMSIZES = args.chromsizes
     REF = args.ref
     TSS = args.tss
     DNASE = args.dnase
@@ -1335,21 +1386,21 @@ def parse_args():
 
     # If mode 1 - TO BE DEPRECATED. In this case, the module is run with
     # Jin's pipeline
-    if args.pipeline == 'elementolab':
+    if args.pipeline == 'kundajelab':
         FASTQ = args.fastq1
-        ALIGNED_BAM = '{0}.sorted.bam'.format(INPUT_PREFIX)
+        ALIGNED_BAM = '{0}.bam'.format(INPUT_PREFIX)
         ALIGNMENT_LOG = '{0}.align.log'.format(INPUT_PREFIX)
-        COORDSORT_BAM = '{0}.sorted.bam'.format(INPUT_PREFIX)
+        COORDSORT_BAM = '{0}.nodup.bam'.format(INPUT_PREFIX)
         DUP_LOG = '{0}.dup.qc'.format(INPUT_PREFIX)
-        PBC_LOG = '{0}.pbc.qc'.format(INPUT_PREFIX)
-        FINAL_BAM = '{0}.sorted.nodup.noM.bam'.format(INPUT_PREFIX)
-        FINAL_BED = '{0}.nodup.tn5.tagAlign.gz'.format(INPUT_PREFIX)
-        BIGWIG = '{0}.readsInPeaks.bin5.centered.smooth.150.max200.bw'.format(
+        PBC_LOG = '{0}.nodup.pbc.qc'.format(INPUT_PREFIX)
+        FINAL_BAM = '{0}.nodup.nonchrM.bam'.format(INPUT_PREFIX)
+        FINAL_BED = '{0}.nodup.nonchrM.tn5.bed.gz'.format(INPUT_PREFIX)
+        BIGWIG = '{0}.nodup.nonchrM.tn5.pf.pval.signal.bigwig'.format(
             INPUT_PREFIX)
-        PEAKS = '{0}'.format(
+        PEAKS = '{0}.nodup.nonchrM.tn5.pf_peaks.narrowPeak'.format(
             INPUT_PREFIX)
     else:  # mode 2
-    #    FASTQ = args.fastq1
+        FASTQ = args.fastq1
         ALIGNED_BAM = args.alignedbam
         ALIGNMENT_LOG = args.alignmentlog
         COORDSORT_BAM = args.coordsortbam
@@ -1362,49 +1413,38 @@ def parse_args():
         NAIVE_OVERLAP_PEAKS = args.naive_overlap_peaks
         IDR_PEAKS = args.idr_peaks
         USE_SAMBAMBA_MARKDUP = args.use_sambamba_markdup
-        NSLOTS = args.processes
 
     return NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, \
-        REG2MAP_BED, REG2MAP, ROADMAP_META, GENOME, ALIGNED_BAM, \
+        REG2MAP_BED, REG2MAP, ROADMAP_META, GENOME, CHROMSIZES, FASTQ, ALIGNED_BAM, \
         ALIGNMENT_LOG, COORDSORT_BAM, DUP_LOG, PBC_LOG, FINAL_BAM, \
         FINAL_BED, BIGWIG, PEAKS, NAIVE_OVERLAP_PEAKS, IDR_PEAKS, \
-        USE_SAMBAMBA_MARKDUP, NSLOTS
-
-def setup_yaml():
-    """ http://stackoverflow.com/a/8661021 """
-    represent_dict_order = lambda self, data:  self.represent_mapping('tag:yaml.org,2002:map', data.items())
-    yaml.add_representer(OrderedDict, represent_dict_order)
-
-
-
+        USE_SAMBAMBA_MARKDUP
 
 
 def main():
 
     # Parse args
     [NAME, OUTPUT_PREFIX, REF, TSS, DNASE, BLACKLIST, PROM, ENH, REG2MAP_BED, REG2MAP,
-     ROADMAP_META, GENOME, ALIGNED_BAM, ALIGNMENT_LOG, COORDSORT_BAM,
+     ROADMAP_META, GENOME, CHROMSIZES, FASTQ, ALIGNED_BAM, ALIGNMENT_LOG, COORDSORT_BAM,
      DUP_LOG, PBC_LOG, FINAL_BAM, FINAL_BED, BIGWIG, PEAKS,
-     NAIVE_OVERLAP_PEAKS, IDR_PEAKS, USE_SAMBAMBA_MARKDUP, NSLOTS] = parse_args()
-    NSLOTS=4
+     NAIVE_OVERLAP_PEAKS, IDR_PEAKS, USE_SAMBAMBA_MARKDUP] = parse_args()
+
     # Set up the log file and timing
     logging.basicConfig(filename='test.log', level=logging.DEBUG)
     start = timeit.default_timer()
 
     # First check if paired/single
-    paired_status = "Paired-ended"
-    read_len = 50
+    paired_status = determine_paired(FINAL_BAM)
 
     # Also get read length
-#    read_len = get_read_length(FASTQ)
-
+    read_len = get_read_length(FASTQ)
 
     # Sequencing metrics: Bowtie1/2 alignment log, chrM, GC bias
-    #BOWTIE_STATS = get_bowtie_stats(ALIGNMENT_LOG)
+    BOWTIE_STATS = get_bowtie_stats(ALIGNMENT_LOG)
     chr_m_reads, fraction_chr_m = get_chr_m(COORDSORT_BAM)
-#    gc_out, gc_plot, gc_summary = get_gc(FINAL_BAM,
-#                                         REF,
-#                                         OUTPUT_PREFIX)
+    gc_out, gc_plot, gc_summary = get_gc(FINAL_BAM,
+                                         REF,
+                                         OUTPUT_PREFIX)
 
     # Library complexity: Preseq results, NRF, PBC1, PBC2
     picard_est_library_size = get_picard_complexity_metrics(ALIGNED_BAM,
@@ -1422,8 +1462,8 @@ def main():
         read_dups, percent_dup = get_sambamba_dup_stats(DUP_LOG, paired_status)
     else:
         read_dups, percent_dup = get_picard_dup_stats(DUP_LOG, paired_status)
-        
-    mito_dups, fract_dups_from_mito = get_mito_dups(COORDSORT_BAM,
+
+    mito_dups, fract_dups_from_mito = get_mito_dups(ALIGNED_BAM,
                                                     OUTPUT_PREFIX,
                                                     paired_status,
                                                     use_sambamba=USE_SAMBAMBA_MARKDUP)
@@ -1443,11 +1483,11 @@ def main():
         insert_plot = ''
 
     # Enrichments: V plot for enrichment
-    vplot_file, vplot_large_file, tss_point_val = make_vplot(FINAL_BAM, # Use final to avoid duplicates
-                                                             TSS,
-                                                             OUTPUT_PREFIX,
-                                                             GENOME,
-                                                             read_len, 400, 2000, NSLOTS)
+    tss_plot_file, tss_plot_large_file, tss_point_val = make_tss_plot(FINAL_BAM, # Use final to avoid duplicates
+                                                                      TSS,
+                                                                      OUTPUT_PREFIX,
+                                                                      CHROMSIZES,
+                                                                      read_len)
 
     # Signal to noise: reads in DHS regions vs not, reads falling
     # into blacklist regions
@@ -1470,8 +1510,7 @@ def main():
     peak_counts = get_peak_counts(PEAKS, NAIVE_OVERLAP_PEAKS, IDR_PEAKS)
     raw_peak_summ, raw_peak_dist = get_region_size_metrics(PEAKS)
     naive_peak_summ, naive_peak_dist = get_region_size_metrics(NAIVE_OVERLAP_PEAKS)
-    #idr_peak_summ, idr_peak_dist = get_region_size_metrics(IDR_PEAKS)
-   
+    idr_peak_summ, idr_peak_dist = get_region_size_metrics(IDR_PEAKS)
 
     # Compare to roadmap
     roadmap_compare_plot = compare_to_roadmap(BIGWIG, REG2MAP_BED, REG2MAP,
@@ -1483,8 +1522,8 @@ def main():
                        final_read_count]
     read_count_labels = ['Start', 'q>30', 'dups removed',
                          'chrM removed (final)']
-    #read_tracker_plot = track_reads(read_count_data, read_count_labels)
-    
+    read_tracker_plot = track_reads(read_count_data, read_count_labels)
+
     # Take all this info and render the html file
     SAMPLE_INFO = OrderedDict([
         ('Sample', NAME),
@@ -1494,12 +1533,12 @@ def main():
     ])
 
     SUMMARY_STATS = OrderedDict([
-        ('Start', first_read_count),
-        ('mapped', mapped_count),
-        ('mapq30', num_mapq),
-        ('nodup_reads',
+        ('Read count from sequencer', first_read_count),
+        ('Read count successfully aligned', mapped_count),
+        ('Read count after filtering for mapping quality', num_mapq),
+        ('Read count after removing duplicate reads',
             int(num_mapq - read_dups)),
-        ('noM_final_reads',
+        ('Read count after removing mitochondrial reads (final read count)',
             final_read_count),
     ])
 
@@ -1514,7 +1553,7 @@ def main():
     ])
 
     ENRICHMENT_PLOTS = {
-        'tss': b64encode(open(vplot_large_file, 'rb').read())
+        'tss': b64encode(open(tss_plot_large_file, 'rb').read())
     }
 
     ANNOT_ENRICHMENTS = OrderedDict([
@@ -1528,39 +1567,16 @@ def main():
                                                       fract_peaks)),
     ])
 
-
-
-    ANNOT_ENRICHMENTS_OUT = OrderedDict([
-        ('Fraction of reads in universal DHS regions', fract_dnase),
-        ('Fraction of reads in blacklist regions', fract_blacklist),
-        ('Fraction of reads in promoter regions', fract_prom),
-        ('Fraction of reads in enhancer regions', fract_enh),
-        ('Fraction of reads in called peak regions', fract_peaks),
-    ])
-
-    FILTERING_STATS_OUT = OrderedDict([
-        ('Mapping_quality_q30', num_mapq),
-        ('Mapping_quality_q30_fract', fract_mapq),
-        ('Duplicates', read_dups),
-        ('Duplicates_percent',  percent_dup),
-        ('Mitochondrial_reads_out_of_total', chr_m_reads),
-        ('Mitochondrial_reads_out_of_total_fract', fraction_chr_m),
-        ('Duplicates_that_are_mitochondrial_out_of_all_dups',mito_dups),
-        ('Fract_Duplicates_that_are_mitochondrial', fract_dups_from_mito),
-        ('Final_reads all', final_read_count),
-        ('Fraction_final_reads_left', fract_reads_left),
-    ])
-
     SAMPLE = OrderedDict([
         ('Name', NAME),
         ('basic_info', SAMPLE_INFO),
 
         # Summary
         ('summary_stats', SUMMARY_STATS),
-       # ('read_tracker', read_tracker_plot),
+        ('read_tracker', read_tracker_plot),
 
         # Alignment statistics
-       # ('bowtie_stats', BOWTIE_STATS),
+        ('bowtie_stats', BOWTIE_STATS),
         ('samtools_flagstat', flagstat),
 
         # Filtering statistics
@@ -1572,20 +1588,20 @@ def main():
         ('yield_prediction', preseq_plot(preseq_data)),
 
         # Fragment length statistics
-        #('fraglen_dist', fragment_length_plot(insert_data)),
+        ('fraglen_dist', fragment_length_plot(insert_data)),
         ('nucleosomal', nucleosomal_qc),
 
         # Peak metrics
         ('peak_counts', peak_counts),
         ('raw_peak_summ', raw_peak_summ),
         ('naive_peak_summ', naive_peak_summ),
-       # ('idr_peak_summ', idr_peak_summ),
+        ('idr_peak_summ', idr_peak_summ),
         ('raw_peak_dist', raw_peak_dist),
         ('naive_peak_dist', naive_peak_dist),
-       # ('idr_peak_dist', idr_peak_dist),
+        ('idr_peak_dist', idr_peak_dist),
 
         # GC
-#        ('gc_bias', plot_gc(gc_out)),
+        ('gc_bias', plot_gc(gc_out)),
 
         # Annotation based statistics
         ('enrichment_plots', ENRICHMENT_PLOTS),
@@ -1596,82 +1612,13 @@ def main():
         ('roadmap_plot', roadmap_compare_plot),
     ])
 
-
-    NSAMPLE = OrderedDict([
-        ('Name', NAME),
-        ('basic_info', SAMPLE_INFO),
-
-        # Summary
-        ('summary_stats', SUMMARY_STATS),
-       # ('read_tracker', read_tracker_plot),
-
-        # Alignment statistics
-       # ('bowtie_stats', BOWTIE_STATS),
-        ('samtools_flagstat', flagstat),
-
-        # Filtering statistics
-        ('filtering_stats', FILTERING_STATS_OUT),
-
-        # Library complexity statistics
-        ('encode_lib_complexity', encode_lib_metrics),
-        ('picard_est_library_size', picard_est_library_size),
-        #('yield_prediction', preseq_plot(preseq_data)),
-
-        # Fragment length statistics
-        #('fraglen_dist', fragment_length_plot(insert_data)),
-        ('nucleosomal', nucleosomal_qc),
-
-        # Peak metrics
-        ('peak_counts', peak_counts),
-        ('raw_peak_summ', raw_peak_summ),
-        #('naive_peak_summ', naive_peak_summ),
-        #('idr_peak_summ', idr_peak_summ),
-        #('raw_peak_dist', raw_peak_dist),
-        #('naive_peak_dist', naive_peak_dist),
-        #('idr_peak_dist', idr_peak_dist),
-
-        # GC
-#        ('gc_bias', plot_gc(gc_out)),
-
-        # Annotation based statistics
-        ('enrichment_plots', ENRICHMENT_PLOTS),
-       # ('TSS_enrichment', tss_point_val),
-        ('annot_enrichments', ANNOT_ENRICHMENTS_OUT),
-
-        # Roadmap plot
-        #('roadmap_plot', roadmap_compare_plot),
-    ])
-
     results = open('{0}_qc.html'.format(OUTPUT_PREFIX), 'w')
     results.write(html_template.render(sample=SAMPLE))
     results.close()
 
-    import cPickle
-
-    f = open('{0}_qc.save'.format(OUTPUT_PREFIX), 'wb')
-    cPickle.dump(NSAMPLE, f, protocol=cPickle.HIGHEST_PROTOCOL)
-    f.close()
-
-    import yaml
-
-    mydatafile = '{0}_qc.yaml'.format(OUTPUT_PREFIX),
-    setup_yaml()
-
-    #with open(mydatafile, "w") as f:
-    #    yaml.dump(SAMPLE, f)
-
-   # with open(mydatafile, "w") as f:
-   #     yaml.dump(SAMPLE, f)
-
-    #print yaml.dump(SAMPLE)
-
-
     # Also produce a text file of relevant stats (so that another module
     # can combine the stats) and put in using ordered dictionary
-
-
-
-    textfile = open('{0}_qc.trad.txt'.format(OUTPUT_PREFIX), 'w')
+    textfile = open('{0}_qc.txt'.format(OUTPUT_PREFIX), 'w')
     for key, value in SAMPLE.iteritems():
         # Make sure to not get b64encode
         if isinstance(value, str) and (len(value) < 300) and (len(value) > 0):
@@ -1700,38 +1647,10 @@ def main():
             pass
     textfile.close()
 
-    textfile = open('{0}_qc.txt'.format(OUTPUT_PREFIX), 'w')
-    for key, value in NSAMPLE.iteritems():
-        # Make sure to not get b64encode
-        if isinstance(value, str) and (len(value) < 300) and (len(value) > 0):
-            textfile.write('{0}\t{1}\n'.format(key, value))
-        elif isinstance(value, int):
-            textfile.write('{0}\t{1}\n'.format(key, value))
-        elif isinstance(value, float):
-            textfile.write('{0}\t{1}\n'.format(key, value))
-        elif isinstance(value, OrderedDict):
-            for dict_key, dict_value in value.iteritems():
-                if isinstance(dict_value, tuple):
-                    textfile.write('{0}'.format(dict_key))
-                    for tuple_val in dict_value:
-                        textfile.write('\t{0}'.format(tuple_val))
-                    textfile.write('\n')
-                else:
-                    textfile.write('{0}\t{1}\n'.format(dict_key, dict_value))
-        # QC tables go here
-        elif isinstance(value, list):
-            if 'bowtie' in value[0]: # Hack, fix this
-                continue
-            for result in value:
-                textfile.write('{0}\t{1}\n'.format(result.metric,
-                                                   result.message))
-        else:
-            pass
-    textfile.close()
-
     stop = timeit.default_timer()
-    print "Run time:", str(datetime.timedelta(seconds=int(stop - start)))
+    print("Run time:", str(datetime.timedelta(seconds=int(stop - start))))
 
     return None
 
-main()
+if __name__=='__main__':
+    main()

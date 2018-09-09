@@ -1,7 +1,7 @@
 import os
 import glob
 
-npp = glob.glob("data/Sample*")
+npp = glob.glob("data/S*")
 
 
 

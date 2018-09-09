@@ -20,7 +20,7 @@ if [ -z "$BLACK" ] ; then
 fi
 
 
-spack load bedtools2
+spack load bedtools2@2.27
 spack load samtools
 
 

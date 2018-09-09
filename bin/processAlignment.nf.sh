@@ -6,10 +6,19 @@ p1=$1
 BLACK=$2
 MYSLOTS=$3
 NSLOTS="8"
+##NSLOTS="${SLURM_NPROCS}"
+#NSLOTS=$(($SLURM_NPROCS -1))
 
-if [ -z "${NSLOTS}+x"  ] ; then
-    NSLOTS="${MYSLOTS}"
-fi
+
+
+#if [ -z "${NSLOTS}+x"  ] ; then
+#    if [ -z "${SLURM_NPROCS}+x"  ] ; then
+#        NSLOTS="$((${MYSLOTS}-1))"
+#    else
+#        NSLOTS="$((${SLURM_NPROCS}-1))"
+#    fi
+#fi
+
 
 
 #BLACK="/home/asd2007/melnick_bcell_scratch/asd2007/Reference/encodeBlack.bed"
@@ -24,9 +33,10 @@ fi
 
 
 
-spack load jdk
+spack load jdk@8u172-b11
 spack load samtools
-spack load bedtools2
+spack load bedtools2@2.27
+spack load r@3.5.0
 
 #export R_JAVA_LD_LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server
 #export PATH="/home/asd2007/Tools/bedtools2/bin:$PATH"
@@ -146,7 +156,6 @@ rm ${out1prefix}.dupmark.bam
 
 
 
-spack load r
 # histogram file
 for w in 1000 500
 do

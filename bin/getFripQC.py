@@ -1,4 +1,6 @@
-#!/home/asd2007/intel/intelpython3/envs/bds_atac/bin/python
+#!/home/asd2007/miniconda3/envs/atacFlow/bin/python
+###!/usr/bin/env python2
+
 
 # Ashley Doane, Elemento Lab
 # adapted from: Daniel Kim, CS Foo

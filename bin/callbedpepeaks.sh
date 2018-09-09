@@ -5,7 +5,10 @@ Sample=$2
 species=$3
 ##chrsz=$4
 
-source activate idp2
+##source activate idp2
+##. /home/asd2007/.spackloads.sh
+
+##conda activate atacFlow
 
 
 macs2 callpeak -t ${rbed} -f BED -n ${Sample}.tag.narrow -g hs --nomodel --shift -75 --extsize 150 --keep-dup all --call-summits -p 1e-3

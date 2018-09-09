@@ -1,6 +1,4 @@
-#!/home/asd2007/miniconda3/envs/atacFlow/bin/python
-
-####!/usr/bin/env python2
+#!/usr/bin/env python2
 
 # Ashley Doane, Elemento Lab
 # adapted from: Daniel Kim, CS Foo
@@ -27,7 +25,7 @@ import logging
 import re
 import yaml
 
-##import backports.functools_lru_cache
+import backports.functools_lru_cache
 
 
 
