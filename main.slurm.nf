@@ -255,9 +255,10 @@ process bt2 {
         publishDir "$results_path/$Sample/$Sample", mode: 'copy'
         //conda 'bowtie2 samtools'
 
-        cpus 8
+        cpus 4
         executor 'slurm'
         memory '4 GB'
+        time '18h'
         //penv 'smp'
         //clusterOptions '-l h_vmem=4G -l h_rt=24:00:00 -l athena=true -R y'
         scratch true
@@ -292,8 +293,8 @@ process processbam {
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
     executor 'slurm'
-    cpus 8
-    time '8h'
+    cpus 4
+    time '18h'
     memory '4 GB'
     //penv 'smp'
     //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
@@ -342,6 +343,14 @@ process bam2bed {
     tag "$Sample"
     publishDir  "$results_path/$Sample/$Sample", mode: 'copy'
 
+   executor 'slurm'
+   cpus 1
+   time '18h'
+   memory '4 GB'
+   //penv 'smp'
+   //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
+   scratch true
+        // cpus 8
     input:
     set Sample, file(nsbam) from nsortedbam
 
@@ -367,6 +376,13 @@ process callpeaks {
     tag "$Sample"
     publishDir  "$results_path/$Sample/$Sample", mode: 'copy'
 
+    executor 'slurm'
+    cpus 1
+    time '8h'
+    memory '4 GB'
+    //penv 'smp'
+    //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
+    scratch true
     input:
     set Sample, file(rbed), file(rbedpe) from finalbedmacs
     val sp from species
@@ -398,10 +414,11 @@ process signalTrack {
         //conda 'bioconda::deeptools=3.1.2'
     executor 'slurm'
     //penv 'smp'
-    memory { 3.GB * task.attempt }
+    memory { 4.GB * task.attempt }
     //clusterOptions '-l h_rt=48:00:00 -l athena=true'
     scratch true
-    cpus 18
+    cpus 8
+    time '20h'
     errorStrategy { task.exitStatus == 140 ? 'retry' : 'terminate' }
 
     input:
@@ -432,6 +449,14 @@ process frip {
     tag "$Sample"
 
     publishDir "$results_path/$Sample/frip", mode: 'copy'
+
+   executor 'slurm'
+   cpus 1
+   time '8h'
+   memory '4 GB'
+   //penv 'smp'
+   //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
+   scratch true
 
     input:
     set Sample, file(file_list) from fripin
@@ -475,6 +500,13 @@ process picardqc {
     tag "$Sample"
     publishDir "$results_path/$Sample/qc", mode: 'copy'
 
+    executor 'slurm'
+    cpus 1
+    time '8h'
+    memory '4 GB'
+    //penv 'smp'
+    //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
+    scratch true
     input:
     set Sample, file(sortbamqc) from sortedbamqc
     file(picardconfig) from picardconf 
@@ -517,7 +549,13 @@ process atacqc {
     publishDir "$results_path/$Sample/qc", mode: 'copy'
         //conda 'bds_atac_requirements.txt'
 
+    executor 'slurm'
     cpus 4
+    time '14h'
+    memory '4 GB'
+    //penv 'smp'
+    //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
+    scratch true
 
     input:
     set Sample, file(file_list) from qcin

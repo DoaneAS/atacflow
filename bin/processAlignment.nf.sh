@@ -5,7 +5,7 @@
 p1=$1
 BLACK=$2
 MYSLOTS=$3
-NSLOTS="8"
+NSLOTS="4"
 ##NSLOTS="${SLURM_NPROCS}"
 #NSLOTS=$(($SLURM_NPROCS -1))
 
@@ -54,8 +54,8 @@ echo "Sorting..."
 out1prefix=$(echo $p1 | sed 's/\.bam$//')
 out1="${out1prefix}.sorted.bam"
 echo ${out1}
-#samtools view -u -q 30 Sample_Ly7_pooled_500k.bam | sambamba sort --memory-limit 32GB --nthreads 6 /dev/stdin --out Sample_Ly7_pooled_500k.sorted.bam
-samtools view -u -q 30 "${p1}" | sambamba sort --memory-limit 32GB --nthreads ${NSLOTS} --out ${out1} /dev/stdin
+#samtools view -u -q 30 Sample_Ly7_pooled_500k.bam | sambamba sort --memory-limit 16GB --nthreads 6 /dev/stdin --out Sample_Ly7_pooled_500k.sorted.bam
+samtools view -u -q 30 "${p1}" | sambamba sort --memory-limit 16GB --nthreads ${NSLOTS} --out ${out1} /dev/stdin
 samtools index $out1
     # echo "aligning : $TMPDIR/${Sample}.R1.trim.fq ,  $TMPDIR/${Sample}.R2.trim.fq using bwa-mem.."
     # bwa mem -t ${NSLOTS} -M $TMPDIR/BWAIndex/genome.fa $TMPDIR/${Sample}.R1.trim.fastq $TMPDIR/${Sample}.R2.trim.fastq | samtools view -bS - >  $TMPDIR/${Sample}.bam
@@ -104,7 +104,7 @@ samtools index ${out4}
 out5=$(echo $out1 | sed 's/\.bam$/.nsorted.nodup.noM.bam/')
 
 
-sambamba sort --memory-limit 32GB -n -t ${NSLOTS} --tmpdir="${TMPDIR}" --out ${out1prefix}.nsorted.nodup.noM.bam ${out4}
+sambamba sort --memory-limit 16GB -n -t ${NSLOTS} --tmpdir="${TMPDIR}" --out ${out1prefix}.nsorted.nodup.noM.bam ${out4}
 
 #rm ${out2m}
 
@@ -120,7 +120,7 @@ sambamba sort --memory-limit 32GB -n -t ${NSLOTS} --tmpdir="${TMPDIR}" --out ${o
 
 echo "Namesort ..."
 
-sambamba sort -n -u --memory-limit 32GB \
+sambamba sort -n -u --memory-limit 16GB \
          --nthreads ${NSLOTS} --tmpdir ${TMPDIR} --out ${out1prefix}.nsort.bam $p1
 
 #samtools sort -n $p1 -o ${out1prefix}.nsort.bam
@@ -131,17 +131,17 @@ sambamba sort -n -u --memory-limit 32GB \
 samtools fixmate -r ${out1prefix}.nsort.bam ${out1prefix}.nsort.fixmate.bam
 #samtools view -F 1804 -f 2 -u  ${out1prefix}.nsort.fixmate.bam | samtools sort - > ${out1prefix}.filt.srt.bam
 
-samtools view -F 1804 -f 2 -u  ${out1prefix}.nsort.fixmate.bam | sambamba sort --memory-limit 32GB \
+samtools view -F 1804 -f 2 -u  ${out1prefix}.nsort.fixmate.bam | sambamba sort --memory-limit 16GB \
                                                                           --nthreads ${NSLOTS} --tmpdir ${TMPDIR} /dev/stdin --out ${out1prefix}.filt.srt.bam
 
 #alias picard="java -Xms500m -Xmx5G -jar $PICARD"
 
-picard  MarkDuplicates VERBOSITY=ERROR QUIET=TRUE\
+picard  MarkDuplicates VERBOSITY=ERROR QUIET=TRUE \
         INPUT=${out1prefix}.filt.srt.bam OUTPUT=${out1prefix}.dupmark.bam METRICS_FILE=${out1prefix}.dup.qc VALIDATION_STRINGENCY=LENIENT ASSUME_SORTED=true REMOVE_DUPLICATES=false
 
 #samtools sort -n ${out1prefix}.dupmark.bam -o ${out1prefix}.srt.tmp.bam
 
-sambamba sort --n --memory-limit 32GB \
+sambamba sort --n --memory-limit 16GB \
          --nthreads ${NSLOTS} --tmpdir ${TMPDIR} --out ${out1prefix}.srt.tmp.bam  ${out1prefix}.dupmark.bam
 
 dupmark_bam="${out1prefix}.srt.tmp.bam"

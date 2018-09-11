@@ -192,22 +192,21 @@ sizefactors = Channel.from(1)
 
 
 
+
 fastq = Channel
-    .from(index.readLines())
-    .map { line ->
-           def list = line.split(',')
-           def Sample = list[0]
-           def path = file(list[1])
-           def reads = file("$path/*_{R1,R2}_001.fastq.gz")
-           // def readsp = "$path/*{R1,R2}.trim.fastq.gz"
-           //  def R1 = file(list[2])
-           //    def R2 = file(list[3])
-           def message = '[INFO] '
-           log.info message
-           [ Sample, path, reads ]
+.from(index.readLines())
+.map { line ->
+       def list = line.split(',')
+       def Sample = list[0]
+       def path = file(list[1])
+       def reads = file("$path/*_{R1,R2}_001.fastq.gz")
+       // def readsp = "$path/*{R1,R2}.trim.fastq.gz"
+       //  def R1 = file(list[2])
+       //    def R2 = file(list[3])
+       def message = '[INFO] '
+       log.info message
+       [ Sample, path, reads ]
 }
-
-
 
 
 
@@ -236,11 +235,11 @@ process ngtrim {
         //file "*_fastqc.{zip,html}" into trimgalore_fastqc_reports
 
     script:
-        def R1 = reads[0]
-        def R2 = reads[1]
-        """
-        NGmerge -z -n ${task.cpus} -a -1 $R1 -2 $R2 -o ${Sample}
-        """
+    def R1 = reads[0]
+    def R2 = reads[1]
+    """
+    NGmerge -z -n ${task.cpus} -a -1 $R1 -2 $R2 -o ${Sample}
+    """
             }
 //}
 
@@ -321,7 +320,7 @@ process processbam {
     """
     #!/bin/bash -l
     set -o pipefail
-    . ~/.spackloads.sh
+    ##. ~/.spackloads.sh
     processAlignment.nf.sh ${nbam} ${BLACK} 8
     """
 }
@@ -348,6 +347,8 @@ process bam2bed {
 
     script:
     """
+    #!/bin/bash -l
+    source activate atacFlow
     samtools fixmate ${nsbam} ${Sample}.nsorted.fixmate.nodup.noM.bam
     convertBAMtoBED.sh ${Sample}.nsorted.fixmate.nodup.noM.bam
     cp ${Sample}.nsorted.fixmate.nodup.noM.tn5.tagAlign.gz  ${Sample}.nodup.tn5.tagAlign.gz
@@ -448,13 +449,17 @@ process frip {
 
     script:
     """
-    #!/bin/bash
-    spack load bedtools2
-    getFripQC.py --bed ${Sample}.nodup.bedpe.gz --peaks ${Sample}.tn5.broadPeak.gz --out ${Sample}.frip.txt
+    ##spack load bedtools2@2.27
+    python ${baseDir}/bin/getFripQC.py \\
+    --bed ${Sample}.nodup.bedpe.gz --peaks ${Sample}.tn5.broadPeak.gz --out ${Sample}.frip.txt
 
-    getFripQC.py --bed ${Sample}.nodup.bedpe.gz --peaks ${bcellref} --out ${Sample}.bcellref.frip.txt
 
-    getFripQC.py --bed ${Sample}.nodup.bedpe.gz --peaks ${encodedhs} --out ${Sample}.encodedhs.frip.txt
+    python ${baseDir}/bin/getFripQC.py \\
+    --bed ${Sample}.nodup.bedpe.gz --peaks ${bcellref} --out ${Sample}.bcellref.frip.txt
+
+
+    python ${baseDir}/bin/getFripQC.py \\
+    --bed ${Sample}.nodup.bedpe.gz --peaks ${encodedhs} --out ${Sample}.encodedhs.frip.txt
 
         """
 }
@@ -479,7 +484,7 @@ process picardqc {
     """
     mkdir -p QCmetrics
     source /home/asd2007/Scripts/picard.env 
-    spack load jdk
+    spack load jdk@8u172-b11
     spack load samtools
     picard EstimateLibraryComplexity I=${sortbamqc} O=${Sample}.EstimateLibraryComplexity.log
     cp *.EstimateLibraryComplexity.log QCmetrics/${Sample}.picardcomplexity.qc
@@ -507,6 +512,7 @@ process atacqc {
     tag "$Sample"
 
     publishDir "$results_path/$Sample/qc", mode: 'copy'
+        //conda 'bds_atac_requirements.txt'
 
     cpus 4
 
@@ -529,20 +535,21 @@ process atacqc {
 
     script:
     """
-    #!/bin/bash -l
+    #!/bin/bash
 
     OUTPREFIX=${Sample}
     INPREFIX=${Sample}
     SAMPLE=${Sample}
     PBC=${Sample}.pbc.qc
     echo ${Sample} ${file_list}
-    spack load jdk
+    ##spack load jdk
+
     spack load samtools
     samtools index -@4 ${Sample}.sorted.nodup.noM.black.bam
     samtools index -@4 ${Sample}.sorted.bam
 
 
-    source activate bds_atac && python ${baseDir}/bin/run_ataqc.athena.py --workdir \$PWD  \\
+    conda activate atacFlow && python ${baseDir}/bin/run_ataqc.athena.py --workdir \$PWD  \\
     --outdir \$PWD \\
     --outprefix ${Sample} \\
     --genome hg38 \\
