@@ -11,7 +11,15 @@ developed by [Anshul Kundaje's lab](https://github.com/kundajelab/atac_dnase_pip
 * Clone repository 
   * using nextflow: ```nextflow clone DoaneAS/atacflow ./```
   * or using git: ```git clone https://github.com/DoaneAS/atacflow.git```
-* Trimmed read pairs in `./data/Samplename/...trim.fastq.gz`
-`python bin/makeIndex.py`
 
-`./callFlow.sh`
+## Setup data
+* ATAC-seq reads go in ```data/<Sample>/*_001.fastq.gz```
+  * Concatenate read pairs per sample ```parallel -j8 './bin/catlanes.sh {}' ::: data/Sample*```
+* Create sample index: `python bin/makeIndex.py`
+
+## Execution  
+
+```nextflow run -with-trace -with-timeline -with-dag flowchart.html \
+         main.nf --index sampleIndex.csv --genome hg38```
+
+* supported genomes on panda WCM cluster:  hg38, mm10

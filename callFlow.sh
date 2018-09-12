@@ -1,3 +1,4 @@
 #!/bin/bash
 
-nextflow run -resume main.nf -with-trace -with-timeline -with-dag flowchart.html
+nextflow run -with-trace -with-timeline -with-dag flowchart.html \
+         main.nf --index sampleIndex.csv --genome hg38
