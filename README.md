@@ -24,6 +24,7 @@ developed by [Anshul Kundaje's lab](https://github.com/kundajelab/atac_dnase_pip
 
 ## Execution  
 ```
-nextflow run -with-trace -with-timeline -with-dag flowchart.html main.nf --index sampleIndex.csv --genome hg38
+nextflow run -with-trace -with-timeline -with-dag flowchart.html \
+ main.nf --index sampleIndex.csv --genome hg38
 ```  
 * supported genomes on panda WCM cluster:  hg38, mm10
