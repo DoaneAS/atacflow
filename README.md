@@ -12,7 +12,8 @@ developed by [Anshul Kundaje's lab](https://github.com/kundajelab/atac_dnase_pip
   * using nextflow: ```nextflow clone DoaneAS/atacflow ./```
   * or using git: ```git clone https://github.com/DoaneAS/atacflow.git```
 * Install conda dependencies:
-    ```conda update conda
+    ```
+    conda update conda
     conda env create --file requirements.atacFlow.yml```
 
 ## Setup data
