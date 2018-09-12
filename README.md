@@ -15,6 +15,7 @@ developed by [Anshul Kundaje's lab](https://github.com/kundajelab/atac_dnase_pip
    ```
    conda update conda
    conda env create --file requirements.atacFlow.yml
+   conda env create --file deep.yml
    ```
 
 ## Setup data
