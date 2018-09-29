@@ -380,6 +380,8 @@ process callpeaks {
     """
     #!/bin/bash -l
 
+    source activate idp2
+
     callbedpepeaks.sh ${rbed} ${Sample} ${sp}
 
     ##callPeaks.sh ${rbedpe} 
@@ -389,7 +391,8 @@ process callpeaks {
 
     ##macs2 callpeak -t  ${rbed} -f BED -n ${Sample}.tag.broad -g hs --nomodel --shift -75 --extsize 150 --keep-dup all --broad --broad-cutoff 0.1
 
-    ##/home/asd2007/ATACseq/broadpeak.py  ${Sample}.tag.broad_peaks.broadPeak ${Sample}.tn5.broadPeak 
+    ##/home/asd2007/ATACseq/broadpeak.py  ${Sample}.tag.broad_peaks.broadPeak ${Sample}.tn5.broadPeak
+    source deactivate
     """
         }
 
@@ -449,6 +452,8 @@ process frip {
 
     script:
     """
+    #!/bin/bash
+    source activate atacFlow
     ##spack load bedtools2@2.27
     python ${baseDir}/bin/getFripQC.py \\
     --bed ${Sample}.nodup.bedpe.gz --peaks ${Sample}.tn5.broadPeak.gz --out ${Sample}.frip.txt
@@ -460,6 +465,7 @@ process frip {
 
     python ${baseDir}/bin/getFripQC.py \\
     --bed ${Sample}.nodup.bedpe.gz --peaks ${encodedhs} --out ${Sample}.encodedhs.frip.txt
+    source deactivate
 
         """
 }

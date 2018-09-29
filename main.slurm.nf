@@ -199,8 +199,8 @@ fastq = Channel
        def list = line.split(',')
        def Sample = list[0]
        def path = file(list[1])
-       //def reads = file("$path/*_{R1,R2}_001.fastq.gz")
-       def reads = file("$path/*.{R1,R2}.fastq.gz")
+       def reads = file("$path/*_{R1,R2}_001.fastq.gz")
+       //def reads = file("$path/*.{R1,R2}.fastq.gz")
        // def readsp = "$path/*{R1,R2}.trim.fastq.gz"
        //  def R1 = file(list[2])
        //    def R2 = file(list[3])
@@ -255,13 +255,13 @@ process bt2 {
         publishDir "$results_path/$Sample/$Sample", mode: 'copy'
         //conda 'bowtie2 samtools'
 
-        cpus 4
+        cpus 8
         executor 'slurm'
-        memory '4 GB'
+        //memory '30 GB'
         time '18h'
-        //penv 'smp'
-        //clusterOptions '-l h_vmem=4G -l h_rt=24:00:00 -l athena=true -R y'
         scratch true
+        //penv 'smp'
+        clusterOptions '--mem-per-cpu=4G --export=ALL'
 
         input:
         set Sample, file(path), file(reads) from trimmed_reads
@@ -280,8 +280,7 @@ process bt2 {
         """
         #!/bin/bash -l
         set -o pipefail
-        spack load bowtie2@2.3.4.1
-        spack load samtools
+        ##spack load bowtie2@2.3.4.1
         bowtie2 -X2000 -x ${index}/genome --local -p 7 -1 ${R1} -2 ${R2} 2> ${Sample}.bt2.log | samtools view -bS -q 30 - > ${Sample}.bam
         """
         }
@@ -293,12 +292,11 @@ process processbam {
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
     executor 'slurm'
-    cpus 4
+    cpus 8
     time '18h'
-    memory '4 GB'
+    memory '24 GB'
     //penv 'smp'
     //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
-    scratch true
     // cpus 8
 
 
@@ -346,10 +344,9 @@ process bam2bed {
    executor 'slurm'
    cpus 1
    time '18h'
-   memory '4 GB'
+   memory '12 GB'
    //penv 'smp'
    //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
-   scratch true
         // cpus 8
     input:
     set Sample, file(nsbam) from nsortedbam
@@ -379,10 +376,9 @@ process callpeaks {
     executor 'slurm'
     cpus 1
     time '8h'
-    memory '4 GB'
+    memory '12 GB'
     //penv 'smp'
     //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
-    scratch true
     input:
     set Sample, file(rbed), file(rbedpe) from finalbedmacs
     val sp from species
@@ -401,6 +397,7 @@ process callpeaks {
     #!/bin/bash -l
     source activate atacFlow
     callbedpepeaks.sh ${rbed} ${Sample} ${sp}
+    source deactivate
 
     """
         }
@@ -414,9 +411,8 @@ process signalTrack {
         //conda 'bioconda::deeptools=3.1.2'
     executor 'slurm'
     //penv 'smp'
-    memory { 4.GB * task.attempt }
+    memory { 8.GB * task.attempt }
     //clusterOptions '-l h_rt=48:00:00 -l athena=true'
-    scratch true
     cpus 8
     time '20h'
     errorStrategy { task.exitStatus == 140 ? 'retry' : 'terminate' }
@@ -453,10 +449,9 @@ process frip {
    executor 'slurm'
    cpus 1
    time '8h'
-   memory '4 GB'
+   memory '12 GB'
    //penv 'smp'
    //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
-   scratch true
 
     input:
     set Sample, file(file_list) from fripin
@@ -503,10 +498,9 @@ process picardqc {
     executor 'slurm'
     cpus 1
     time '8h'
-    memory '4 GB'
+    memory '12 GB'
     //penv 'smp'
     //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
-    scratch true
     input:
     set Sample, file(sortbamqc) from sortedbamqc
     file(picardconfig) from picardconf 
@@ -552,10 +546,9 @@ process atacqc {
     executor 'slurm'
     cpus 4
     time '14h'
-    memory '4 GB'
+    memory '24 GB'
     //penv 'smp'
     //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
-    scratch true
 
     input:
     set Sample, file(file_list) from qcin
@@ -630,7 +623,7 @@ process atacqc {
 workflow.onComplete {
     println ( workflow.success ? "Done!" : "Oops .. something went wrong" )
     def subject = 'pipeline execution'
-    def recipient = 'ashley.doane@gmail.com'
+        def recipient = 'ashley.doane@gmail.com'
 
     ['mail', '-s', subject, recipient].execute() << """
 

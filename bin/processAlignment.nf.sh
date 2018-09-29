@@ -32,6 +32,39 @@ then
 fi
 
 
+KERNEL=$(uname -r | cut -d '.' -f1,2)
+
+if [ "${KERNEL}" = "2.6" ] ; then
+    if [ -f /pbtech_mounts/softlib001/apps/EL6/spack/share/spack/setup-env.sh ] ; then
+        . /pbtech_mounts/softlib001/apps/EL6/spack/share/spack/setup-env.sh
+    fi
+   # spack load ncurses@6.1%gcc@6.3.0
+   # spack load bzip2@1.0.6%gcc@6.3.0
+    spack load jdk@8u172-b11
+    ##export PATH=/athena/elementolab/scratch/asd2007/anaconda3sge/bin:$PATH
+fi
+
+
+if [ "${KERNEL}" = "3.10" ] ; then
+    if [ -f /pbtech_mounts/softlib001/apps/EL7/spack/share/spack/setup-env.sh ] ; then
+        . /pbtech_mounts/softlib001/apps/EL7/spack/share/spack/setup-env.sh
+    fi
+    spack load /h2aywb5 #readline
+    spack load /vl4b2l5  ## openssl
+    spack load /nhtvde2 ## xz
+   # spack load /kd6dys5 # jdk
+    spack load /bu63biy ## libxml2
+    spack load /jazy725 ## ncurses
+    spack load /ikn3syj ##bzip2
+    spack load jdk@8u172
+    spack load emacs
+
+   # if [ -f /home/asd2007/miniconda3/etc/profile.d/conda.sh ] ; then
+   #     . /home/asd2007/miniconda3/etc/profile.d/conda.sh
+        ##conda activate
+   #fi
+fi
+##source ~/.spackloads.sh
 
 spack load jdk@8u172-b11
 spack load samtools
