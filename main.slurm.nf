@@ -462,7 +462,7 @@ process frip {
 
     output:
     set Sample, file("${Sample}.frip.txt") into frips
-    set Sample, file("${Sample}.bcellref.frip.txt") into frips2
+        //    set Sample, file("${Sample}.bcellref.frip.txt") into frips2
     set Sample, file("${Sample}.encodedhs.frip.txt") into frips3
 
     script:
@@ -473,10 +473,6 @@ process frip {
 
     getFripQC.py \\
     --bed ${Sample}.nodup.bedpe.gz --peaks ${Sample}.tn5.broadPeak.gz --out ${Sample}.frip.txt
-
-
-    getFripQC.py \\
-    --bed ${Sample}.nodup.bedpe.gz --peaks ${bcellref} --out ${Sample}.bcellref.frip.txt
 
 
     getFripQC.py \\

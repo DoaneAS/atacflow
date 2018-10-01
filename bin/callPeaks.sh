@@ -4,7 +4,7 @@
 
 spack load bedtools2@2.27
 
-conda activate idp2
+source activate idp2
 
 # ========================
 # Create pseudoReplicates
@@ -104,6 +104,8 @@ intersectBed -wo -a <(zcat -f ${POOLED}) -b <(zcat -f ${PR_PREFIX}.pr1.tn5.pval0
     | awk 'BEGIN{FS="\t";OFS="\t"} {s1=$3-$2; s2=$13-$12; if (($21/s1 >= 0.5) || ($21/s2 >= 0.5)) {print $0}}'  | cut -f 1-10 | sort | uniq \
     | intersectBed -wo -a stdin -b <(zcat -f ${PR_PREFIX}.pr2.tn5.pval0.1.500k.narrowPeak.gz) \
     | awk 'BEGIN{FS="\t";OFS="\t"} {s1=$3-$2; s2=$13-$12; if (($21/s1 >= 0.5) || ($21/s2 >= 0.5)) {print $0}}' | cut -f 1-10 | sort | uniq | gzip -c > ${PR_PREFIX}.tn5.pooled.pf.pval0.1.500K.naive_overlap.narrowPeak.gz
+
+source deactivate
 
 # SYS command. line 109
 
