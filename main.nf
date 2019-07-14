@@ -65,16 +65,6 @@ if( params.bwa_index ){
 }
 
 
-if( params.bt2_index ){
-    bt2_index = Channel
-        .fromPath(params.bt2_index)
-        .ifEmpty { exit 1, "Bowtie2 index not found: ${params.bt2_index}" }
-} else if ( params.fasta ){
-    fasta = file(params.fasta)
-        if( !fasta.exists() ) exit 1, "Fasta file not found: ${params.fasta}"
-                                  } else {
-    exit 1, "No reference genome specified!"
-        }
 
 
 
@@ -128,6 +118,17 @@ black = file(params.black)
 encodedhs = file(params.encodedhs)
 chrsz = file(params.chrsz)
 species = params.species
+
+
+if (params.bt2_index){
+    lastPath = params.bt2_index.lastIndexOf(File.separator)
+    bt2_dir =  params.bt2_index.substring(0,lastPath+1)
+    bt2_base = params.bt2_index.substring(lastPath+1)
+    ch_bt2_index = Channel
+        .fromPath(bt2_dir, checkIfExists: true)
+        .ifEmpty { exit 1, "BT2 index directory not found: ${bt2_dir}" }
+}
+
 
 
  /*
@@ -200,6 +201,7 @@ fastq = Channel
        def Sample = list[0]
        def path = file(list[1])
        def reads = file("$path/*_{R1,R2}_001.fastq.gz")
+       //def reads = file("$path/*.{R1,R2}.fastq.gz")
        // def readsp = "$path/*{R1,R2}.trim.fastq.gz"
        //  def R1 = file(list[2])
        //    def R2 = file(list[3])
@@ -211,7 +213,7 @@ fastq = Channel
 
 
 /*
- * STEP 2 - Trim Galore!
+ * STEP 2 - NGmerge read trimming
  */
 //if(params.notrim){
 ///    trimmed_reads = read_files_trimming
@@ -220,26 +222,28 @@ process ngtrim {
     tag "$Sample"
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
-    cpus 4
-    executor 'sge'
-    penv 'smp'
-    clusterOptions '-l h_vmem=2G -l h_rt=24:00:00 -l athena=true'
-    scratch true
+    cpus 6
+    executor 'slurm'
+        ////clusterOptions '-l h_vmem=2G -l h_rt=24:00:00 -l athena=true'
+        //scratch true
+    time '8h'
+    queue 'panda'
+    memory '12 GB'
 
     input:
     set Sample, file(path), file(reads) from fastq
 
     output:
-        set Sample, file(path), file('*_{1,2}.fastq.gz') into trimmed_reads
+        set Sample, file('*_{1,2}.fastq.gz') into trimmed_reads
         //file '*trimming_report.txt' into trimgalore_results
         //file "*_fastqc.{zip,html}" into trimgalore_fastqc_reports
 
     script:
-    def R1 = reads[0]
-    def R2 = reads[1]
-    """
-    NGmerge -z -n ${task.cpus} -a -1 $R1 -2 $R2 -o ${Sample}
-    """
+        def R1 = reads[0]
+        def R2 = reads[1]
+        """
+        NGmerge -n 4 -z -u 41 -a -1 ${R1} -2 ${R2} -o ${Sample}
+        """
             }
 //}
 
@@ -254,19 +258,23 @@ process bt2 {
         //conda 'bowtie2 samtools'
 
         cpus 8
-        executor 'sge'
-        penv 'smp'
-        clusterOptions '-l h_vmem=4G -l h_rt=24:00:00 -l athena=true -R y'
+        executor 'slurm'
+        memory '32 GB'
+        time '18h'
+        queue 'panda'
         scratch true
+        //penv 'smp'
+        clusterOptions '--mem-per-cpu=4G --export=ALL'
 
         input:
-        set Sample, file(path), file(reads) from trimmed_reads
-        file index from bt2_index.first()
+        set Sample, file(reads) from trimmed_reads
+        file index from ch_bt2_index.collect()
         //file bwaref from bwa_index.collect()
         //file(bwaref) from bwaref
 
         output:
-        set Sample, file("${Sample}.bam") into newbam
+        set Sample, file("${Sample}.bam") into newbam, genrichbam
+        //set Sample, file("${Sample}.bam") into genrichbam
         set Sample, file("${Sample}.bt2.log") into bt2log
    
 
@@ -274,54 +282,87 @@ process bt2 {
         def R1 = reads[0]
         def R2 = reads[1]
         """
-        #!/bin/bash -l
         set -o pipefail
-        ##spack load bowtie2
-        ##spack load samtools
-        bowtie2 -X2000 -x ${index}/genome --local -p \${NSLOTS} -1 ${R1} -2 ${R2} 2> ${Sample}.bt2.log | samtools view -bS -q 30 - > ${Sample}.bam
+        ##spack load bowtie2@2.3.4.1
+        bowtie2 -X2000 -x ${index}/genome --local -p 7 --mm -k 4 -1 ${R1} -2 ${R2} 2> ${Sample}.bt2.log | samtools view -bS -q 30 - > ${Sample}.bam
         """
         }
 
+
+process genrich {
+    tag "$Sample"
+    publishDir "$results_path/$Sample/$Sample", mode: 'copy'
+
+    executor 'slurm'
+    cpus 4
+    queue 'panda'
+    time '18h'
+    memory '24 GB'
+    //penv 'smp'
+    //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
+    // cpus 8
+
+
+    input:
+    set Sample, file(nbam) from genrichbam
+    file black
+
+    output:
+    set Sample, file("${Sample}.genrich.narrowPeak") into genrichPeak
+    set Sample, file("${Sample}.genrich.log") into genrichLog
+
+    script:
+    """
+    set -o pipefail
+    ##. ~/.spackloads.sh
+    samtools sort -@ ${task.cpus} -n -o ${Sample}.nsorted.bam ${nbam}
+    Genrich -j -y -r -e chrM,chrY -t ${Sample}.nsorted.bam -o ${Sample}.genrich.narrowPeak -E ${black} -f ${Sample}.genrich.log
+    """
+}
 
 
 process processbam {
     tag "$Sample"
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
-    executor 'sge'
+    executor 'slurm'
     cpus 8
-    penv 'smp'
-    clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
-    scratch true
+    time '18h'
+    queue 'panda'
+    memory '24 GB'
+    //penv 'smp'
+    //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
     // cpus 8
 
 
     input:
     set Sample, file(nbam) from newbam
-    file(BLACK) from blacklist
+    file black
 
     output:
-    set Sample, file("${Sample}.sorted.bam") into sortedbam
-    set Sample, file("${Sample}.sorted.bam") into sortbamqc
-    set Sample, file("${Sample}.sorted.bam") into sortedbamqc
-    set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into finalbam
-    set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into finalbamforqc
-    set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into bamforsignal
+    set Sample, file("${Sample}.sorted.bam") into sortedbam, sortbamqc, sortedbamqc
+    //set Sample, file("${Sample}.sorted.bam") into sortbamqc
+    //set Sample, file("${Sample}.sorted.bam") into sortedbamqc
+    set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into finalbam, finalbamforqc, bamforsignal
+    //set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into finalbamforqc
+   // set Sample, file("${Sample}.sorted.nodup.noM.black.bam") into bamforsignal
     set Sample, file("${Sample}*.pbc.qc") into pbcqc
     set Sample, file("${Sample}*.dup.qc") into dupqc
     file("*nsort.fixmate.bam") into fixmatebam
         // file("*window500.hist_data") into hist_data
     file("*window500.hist_graph.pdf") into fragsizes
-    set Sample, file("${Sample}.nsorted.nodup.noM.bam") into nsortedbam
+    set Sample, file("${Sample}.nsorted.nodup.noM.bam") into nsortedbam, nsortedbamforqc
         // set Sample, file("${Sample}.sorted.nodup.noM.black.bam"), file("${Sample}.sorted.nodup.noM.black.bam.bai") into bamforsignal
-    set Sample, file("${Sample}.nsorted.nodup.noM.bam") into nsortedbamforqc
+    //set Sample, file("${Sample}.nsorted.nodup.noM.bam") into nsortedbamforqc
 
     script:
     """
-    #!/bin/bash -l
+    #!/bin/bash
     set -o pipefail
     ##. ~/.spackloads.sh
-    processAlignment.nf.sh ${nbam} ${BLACK} 8
+    source activate atacFlow
+    processAlignment.nf.sh ${nbam} ${black} 8
+    source deactivate
     """
 }
 
@@ -336,19 +377,25 @@ process bam2bed {
     tag "$Sample"
     publishDir  "$results_path/$Sample/$Sample", mode: 'copy'
 
+   executor 'slurm'
+   cpus 1
+   time '18h'
+   queue 'panda'
+   memory '12 GB'
+   //penv 'smp'
+   //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
+        // cpus 8
     input:
     set Sample, file(nsbam) from nsortedbam
 
     output:
-    set Sample, file("${Sample}.nodup.tn5.tagAlign.gz") into finalbedqc
-    set Sample, file("${Sample}.nodup.tn5.tagAlign.gz") into finalbed
+    set Sample, file("${Sample}.nodup.tn5.tagAlign.gz") into finalbedqc, finalbed
+    //set Sample, file("${Sample}.nodup.tn5.tagAlign.gz") into finalbed
     set Sample, file("${Sample}.nodup.bedpe.gz") into finalbedpe
     set Sample, file("${Sample}.nodup.tn5.tagAlign.gz"), file("${Sample}.nodup.bedpe.gz") into finalbedmacs
 
     script:
     """
-    #!/bin/bash -l
-    source activate atacFlow
     samtools fixmate ${nsbam} ${Sample}.nsorted.fixmate.nodup.noM.bam
     convertBAMtoBED.sh ${Sample}.nsorted.fixmate.nodup.noM.bam
     cp ${Sample}.nsorted.fixmate.nodup.noM.tn5.tagAlign.gz  ${Sample}.nodup.tn5.tagAlign.gz
@@ -363,13 +410,20 @@ process callpeaks {
     tag "$Sample"
     publishDir  "$results_path/$Sample/$Sample", mode: 'copy'
 
+    executor 'slurm'
+    cpus 1
+    queue 'panda'
+    time '8h'
+    memory '12 GB'
+    //penv 'smp'
+    //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
     input:
     set Sample, file(rbed), file(rbedpe) from finalbedmacs
     val sp from species
 
     output:
 
-    set Sample, file("${Sample}.narrowPeak") into narrowpeakfile
+    set Sample, file("${Sample}*.narrowPeak") into narrowpeakfile
     set Sample, file("${Sample}.tn5.narrowPeak.gz") into narrowpeak
     set Sample, file("${Sample}.tag.narrow_summits.bed") into summits
     set Sample, file("${Sample}.tn5.broadPeak.gz") into broadpeak
@@ -379,20 +433,10 @@ process callpeaks {
     script:
     """
     #!/bin/bash -l
-
     source activate idp2
-
     callbedpepeaks.sh ${rbed} ${Sample} ${sp}
-
-    ##callPeaks.sh ${rbedpe} 
-
-    ##macs2 callpeak -t ${rbed} -f BED -n ${Sample}.tag.narrow -g hs --nomodel --shift -75 --extsize 150 --keep-dup all --call-summits -p 1e-3
-    ##/home/asd2007/ATACseq/narrowpeak.py ${Sample}.tag.narrow_peaks.narrowPeak ${Sample}.tn5.narrowPeak 
-
-    ##macs2 callpeak -t  ${rbed} -f BED -n ${Sample}.tag.broad -g hs --nomodel --shift -75 --extsize 150 --keep-dup all --broad --broad-cutoff 0.1
-
-    ##/home/asd2007/ATACseq/broadpeak.py  ${Sample}.tag.broad_peaks.broadPeak ${Sample}.tn5.broadPeak
     source deactivate
+
     """
         }
 
@@ -402,13 +446,14 @@ process signalTrack {
 
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
-
-    executor 'sge'
-    penv 'smp'
-    memory { 4.GB * task.attempt }
-    clusterOptions '-l h_rt=48:00:00 -l athena=true'
-    scratch true
+    conda 'bioconda::deeptools=3.3.0'
+    executor 'slurm'
+    queue 'panda'
+    //penv 'smp'
+    memory { 8.GB * task.attempt }
+    //clusterOptions '-l h_rt=48:00:00 -l athena=true'
     cpus 8
+    time '20h'
     errorStrategy { task.exitStatus == 140 ? 'retry' : 'terminate' }
 
     input:
@@ -421,7 +466,6 @@ process signalTrack {
 
     script:
     """
-    #!/bin/bash -l
 
     getbamcov.sh ${sbam} ${Sample} ${task.cpus}
 
@@ -438,6 +482,14 @@ process frip {
 
     publishDir "$results_path/$Sample/frip", mode: 'copy'
 
+   executor 'slurm'
+   cpus 1
+   queue 'panda'
+   time '8h'
+   memory '12 GB'
+   //penv 'smp'
+   //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
+
     input:
     set Sample, file(file_list) from fripin
         //set Sample, file(peaks) from broadpeak
@@ -447,24 +499,22 @@ process frip {
 
     output:
     set Sample, file("${Sample}.frip.txt") into frips
-    set Sample, file("${Sample}.bcellref.frip.txt") into frips2
+        //    set Sample, file("${Sample}.bcellref.frip.txt") into frips2
     set Sample, file("${Sample}.encodedhs.frip.txt") into frips3
 
     script:
     """
-    #!/bin/bash
+    #!/bin/bash -l
+
     source activate atacFlow
-    ##spack load bedtools2@2.27
-    python ${baseDir}/bin/getFripQC.py \\
+
+    getFripQC.py \\
     --bed ${Sample}.nodup.bedpe.gz --peaks ${Sample}.tn5.broadPeak.gz --out ${Sample}.frip.txt
 
 
-    python ${baseDir}/bin/getFripQC.py \\
-    --bed ${Sample}.nodup.bedpe.gz --peaks ${bcellref} --out ${Sample}.bcellref.frip.txt
-
-
-    python ${baseDir}/bin/getFripQC.py \\
+    getFripQC.py \\
     --bed ${Sample}.nodup.bedpe.gz --peaks ${encodedhs} --out ${Sample}.encodedhs.frip.txt
+
     source deactivate
 
         """
@@ -478,8 +528,15 @@ process picardqc {
     tag "$Sample"
     publishDir "$results_path/$Sample/qc", mode: 'copy'
 
+    executor 'slurm'
+    cpus 1
+    time '8h'
+    queue 'panda'
+    memory '12 GB'
+    //penv 'smp'
+    //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
     input:
-    set Sample, file(sortbamqc) from sortedbamqc
+    set Sample, file(sortbam) from sortedbamqc
     file(picardconfig) from picardconf 
 
     output:
@@ -490,9 +547,7 @@ process picardqc {
     """
     mkdir -p QCmetrics
     source /home/asd2007/Scripts/picard.env 
-    spack load jdk@8u172-b11
-    spack load samtools
-    picard EstimateLibraryComplexity I=${sortbamqc} O=${Sample}.EstimateLibraryComplexity.log
+    picard EstimateLibraryComplexity I=${sortbam} O=${Sample}.EstimateLibraryComplexity.log
     cp *.EstimateLibraryComplexity.log QCmetrics/${Sample}.picardcomplexity.qc
     """
 
@@ -520,7 +575,13 @@ process atacqc {
     publishDir "$results_path/$Sample/qc", mode: 'copy'
         //conda 'bds_atac_requirements.txt'
 
+    executor 'slurm'
     cpus 4
+    time '14h'
+    queue 'panda'
+    memory '24 GB'
+    //penv 'smp'
+    //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
 
     input:
     set Sample, file(file_list) from qcin
@@ -541,7 +602,7 @@ process atacqc {
 
     script:
     """
-    #!/bin/bash
+    #!/bin/bash -l
 
     OUTPREFIX=${Sample}
     INPREFIX=${Sample}
@@ -550,12 +611,12 @@ process atacqc {
     echo ${Sample} ${file_list}
     ##spack load jdk
 
-    spack load samtools
     samtools index -@4 ${Sample}.sorted.nodup.noM.black.bam
     samtools index -@4 ${Sample}.sorted.bam
 
 
-    conda activate atacFlow && python ${baseDir}/bin/run_ataqc.athena.py --workdir \$PWD  \\
+dup.qc
+    source activate atacFlow && ${baseDir}/bin/run_ataqc.athena.py --workdir \$PWD  \\
     --outdir \$PWD \\
     --outprefix ${Sample} \\
     --genome hg38 \\
@@ -595,7 +656,7 @@ process atacqc {
 workflow.onComplete {
     println ( workflow.success ? "Done!" : "Oops .. something went wrong" )
     def subject = 'pipeline execution'
-    def recipient = 'ashley.doane@gmail.com'
+        def recipient = 'ashley.doane@gmail.com'
 
     ['mail', '-s', subject, recipient].execute() << """
 
