@@ -242,7 +242,7 @@ process ngtrim {
         def R1 = reads[0]
         def R2 = reads[1]
         """
-        NGmerge -n 4 -z -u 41 -a -1 ${R1} -2 ${R2} -o ${Sample}
+        NGmerge -n 4 -z -u 43 -a -1 ${R1} -2 ${R2} -o ${Sample}
         """
             }
 //}
@@ -327,12 +327,9 @@ process processbam {
 
     executor 'slurm'
     cpus 8
-    time '18h'
+    time '8h'
     queue 'panda'
-    memory '24 GB'
-    //penv 'smp'
-    //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
-    // cpus 8
+    memory '32 GB'
 
 
     input:
@@ -357,12 +354,8 @@ process processbam {
 
     script:
     """
-    #!/bin/bash
     set -o pipefail
-    ##. ~/.spackloads.sh
-    source activate atacFlow
     processAlignment.nf.sh ${nbam} ${black} 8
-    source deactivate
     """
 }
 
@@ -433,9 +426,10 @@ process callpeaks {
     script:
     """
     #!/bin/bash -l
-    source activate idp2
+    source /home/asd2007/miniconda3/etc/profile.d/conda.sh
+    conda activate idp2
     callbedpepeaks.sh ${rbed} ${Sample} ${sp}
-    source deactivate
+    conda deactivate
 
     """
         }
@@ -446,7 +440,7 @@ process signalTrack {
 
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
-    conda 'bioconda::deeptools=3.3.0'
+    //conda 'bioconda::deeptools=3.3.0'
     executor 'slurm'
     queue 'panda'
     //penv 'smp'
@@ -462,7 +456,7 @@ process signalTrack {
 
 
     output:
-    set Sample, file("${Sample}.bpm.sizefactors.bw") into insertionTrackbw
+    set Sample, file("${Sample}.bpm.bw") into insertionTrackbw
 
     script:
     """
@@ -482,11 +476,11 @@ process frip {
 
     publishDir "$results_path/$Sample/frip", mode: 'copy'
 
-   executor 'slurm'
+   executor 'local'
    cpus 1
-   queue 'panda'
-   time '8h'
-   memory '12 GB'
+    //queue 'panda'
+    //time '8h'
+    //memory '12 GB'
    //penv 'smp'
    //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
 
@@ -505,8 +499,8 @@ process frip {
     script:
     """
     #!/bin/bash -l
-
-    source activate atacFlow
+    source /home/asd2007/miniconda3/etc/profile.d/conda.sh
+    conda activate atacFlow
 
     getFripQC.py \\
     --bed ${Sample}.nodup.bedpe.gz --peaks ${Sample}.tn5.broadPeak.gz --out ${Sample}.frip.txt
@@ -515,9 +509,9 @@ process frip {
     getFripQC.py \\
     --bed ${Sample}.nodup.bedpe.gz --peaks ${encodedhs} --out ${Sample}.encodedhs.frip.txt
 
-    source deactivate
+    conda deactivate
 
-        """
+    """
 }
 
 
@@ -575,11 +569,11 @@ process atacqc {
     publishDir "$results_path/$Sample/qc", mode: 'copy'
         //conda 'bds_atac_requirements.txt'
 
-    executor 'slurm'
-    cpus 4
-    time '14h'
-    queue 'panda'
-    memory '24 GB'
+    executor 'local'
+    //cpus 4
+    //time '14h'
+    //queue 'panda'
+    //memory '24 GB'
     //penv 'smp'
     //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
 
@@ -602,7 +596,6 @@ process atacqc {
 
     script:
     """
-    #!/bin/bash -l
 
     OUTPREFIX=${Sample}
     INPREFIX=${Sample}
@@ -615,8 +608,8 @@ process atacqc {
     samtools index -@4 ${Sample}.sorted.bam
 
 
-dup.qc
-    source activate atacFlow && ${baseDir}/bin/run_ataqc.athena.py --workdir \$PWD  \\
+    source /home/asd2007/miniconda3/etc/profile.d/conda.sh
+    conda activate atacFlow && ${baseDir}/bin/run_ataqc.athena.py --workdir \$PWD  \\
     --outdir \$PWD \\
     --outprefix ${Sample} \\
     --genome hg38 \\
@@ -635,7 +628,7 @@ dup.qc
     --pbc ${Sample}.pbc.qc \\
     --finalbam ${Sample}.sorted.nodup.noM.black.bam \\
     --finalbed ${Sample}.nodup.tn5.tagAlign.gz \\
-    --bigwig ${Sample}.bpm.sizefactors.bw \\
+    --bigwig ${Sample}.bpm.bw \\
     --peaks ${Sample}.tn5.broadPeak.gz \\
     --naive_overlap_peaks ${Sample}.tn5.broadPeak.gz \\
     --idr_peaks ${Sample}.tn5.broadPeak.gz  --processes ${task.cpus}

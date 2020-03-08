@@ -6,8 +6,8 @@
 # adapted from: Daniel Kim, CS Foo
 # Script to run ataqc, all parts
 
-import matplotlib
-matplotlib.use('Agg')
+#import matplotlib
+#matplotlib.use('Agg')
 
 import os
 import sys
@@ -33,8 +33,8 @@ from collections import OrderedDict
 from io import BytesIO
 from scipy.signal import find_peaks_cwt
 from jinja2 import Template
-from matplotlib import pyplot as plt
-from matplotlib import mlab
+#from matplotlib import pyplot as plt
+#from matplotlib import mlab
 
 
 # QC STUFF

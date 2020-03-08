@@ -200,7 +200,7 @@ fastq = Channel
        def list = line.split(',')
        def Sample = list[0]
        def path = file(list[1])
-       def reads = file("$path/*_{R1,R2}_001.fastq.gz")
+       def reads = file("$path/*_R{1,2}_001.fastq.gz")
        //def reads = file("$path/*.{R1,R2}.fastq.gz")
        // def readsp = "$path/*{R1,R2}.trim.fastq.gz"
        //  def R1 = file(list[2])
@@ -360,7 +360,7 @@ process processbam {
     #!/bin/bash
     set -o pipefail
     ##. ~/.spackloads.sh
-    source activate atacFlow
+    ##source activate atacFlow
     processAlignment.nf.sh ${nbam} ${black} 8
     source deactivate
     """
@@ -496,28 +496,23 @@ process frip {
         //   file(lncapref) from lncaprefpeaks
     file(bcellref) from bcellrefpeaks
     file(encodedhs) from encodedhs
+    file(chrsz) from chrsz
 
     output:
-    set Sample, file("${Sample}.frip.txt") into frips
         //    set Sample, file("${Sample}.bcellref.frip.txt") into frips2
-    set Sample, file("${Sample}.encodedhs.frip.txt") into frips3
+    set Sample, file("${Sample}.frip.qc.txt") into frips
 
     script:
     """
     #!/bin/bash -l
 
-    source activate atacFlow
+    ##source activate atacFlow
+    ##source ~/miniconda3/etc/profile.d/conda.sh
+    ##conda activate atacFlow
 
-    getFripQC.py \\
-    --bed ${Sample}.nodup.bedpe.gz --peaks ${Sample}.tn5.broadPeak.gz --out ${Sample}.frip.txt
-
-
-    getFripQC.py \\
-    --bed ${Sample}.nodup.bedpe.gz --peaks ${encodedhs} --out ${Sample}.encodedhs.frip.txt
-
-    source deactivate
-
-        """
+    encode_frip.py --chrsz ${chrsz} ${encodedhs} ${Sample}.nodup.bedpe.gz 
+    cp reg2map_honeybadger2_dnase_all_p10_ucsc.hg19_to_hg38.frip.qc ${Sample}.frip.qc.txt
+    """
 }
 
 
@@ -614,9 +609,8 @@ process atacqc {
     samtools index -@4 ${Sample}.sorted.nodup.noM.black.bam
     samtools index -@4 ${Sample}.sorted.bam
 
-
-dup.qc
-    source activate atacFlow && ${baseDir}/bin/run_ataqc.athena.py --workdir \$PWD  \\
+    source /home/asd2007/miniconda3/etc/profile.d/conda.sh
+    conda activate atacFlow && ${baseDir}/bin/run_ataqc.athena.py --workdir \$PWD  \\
     --outdir \$PWD \\
     --outprefix ${Sample} \\
     --genome hg38 \\

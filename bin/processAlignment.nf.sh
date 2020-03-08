@@ -32,44 +32,12 @@ then
 fi
 
 
-KERNEL=$(uname -r | cut -d '.' -f1,2)
+## workaround for conda activate issue
+source /home/asd2007/miniconda3/etc/profile.d/conda.sh
+conda activate atacFlow
 
-if [ "${KERNEL}" = "2.6" ] ; then
-    if [ -f /pbtech_mounts/softlib001/apps/EL6/spack/share/spack/setup-env.sh ] ; then
-        . /pbtech_mounts/softlib001/apps/EL6/spack/share/spack/setup-env.sh
-    fi
-   # spack load ncurses@6.1%gcc@6.3.0
-   # spack load bzip2@1.0.6%gcc@6.3.0
-    spack load jdk@8u172-b11
-    ##export PATH=/athena/elementolab/scratch/asd2007/anaconda3sge/bin:$PATH
-fi
-
-
-if [ "${KERNEL}" = "3.10" ] ; then
-    if [ -f /pbtech_mounts/softlib001/apps/EL7/spack/share/spack/setup-env.sh ] ; then
-        . /pbtech_mounts/softlib001/apps/EL7/spack/share/spack/setup-env.sh
-    fi
-    spack load /h2aywb5 #readline
-    spack load /vl4b2l5  ## openssl
-    spack load /nhtvde2 ## xz
-   # spack load /kd6dys5 # jdk
-    spack load /bu63biy ## libxml2
-    spack load /jazy725 ## ncurses
-    spack load /ikn3syj ##bzip2
-    spack load jdk@8u172
-    spack load emacs
-
-   # if [ -f /home/asd2007/miniconda3/etc/profile.d/conda.sh ] ; then
-   #     . /home/asd2007/miniconda3/etc/profile.d/conda.sh
-        ##conda activate
-   #fi
-fi
 ##source ~/.spackloads.sh
 
-spack load jdk@8u172-b11
-spack load samtools
-spack load bedtools2@2.27
-spack load r@3.5.0
 
 #export R_JAVA_LD_LIBRARY_PATH=${JAVA_HOME}/jre/lib/amd64/server
 #export PATH="/home/asd2007/Tools/bedtools2/bin:$PATH"
@@ -113,7 +81,7 @@ out2m=$(echo $out1 | sed 's/\.bam$/.nodup.noM.temp.bam/')
 
 out3=$(echo $out1 | sed 's/\.bam$/.nodup.noM.bam/')
 
-export CHROMOSOMES=$(samtools view -H $out2 | grep '^@SQ' | cut -f 2 | grep -v -e _ -e chrM -e chrX -e chrY -e 'VN:' | sed 's/SN://' | xargs echo)
+export CHROMOSOMES=$(samtools view -H $out2 | grep '^@SQ' | cut -f 2 | grep -v -e _ -e chrM -e 'VN:' | sed 's/SN://' | xargs echo)
 
 samtools view -@ ${NSLOTS} -b -h -f 3 -F 4 -F 8 -F 256 -F 1024 -F 2048 -q 30 $out2 $CHROMOSOMES > ${out3}
 
@@ -194,3 +162,5 @@ for w in 1000 500
 do
     picard CollectInsertSizeMetrics I=$out4 O="${out4}.window${w}.hist_data" H="${out4}.window${w}.hist_graph.pdf" W=${w}
 done
+
+conda deactivate
