@@ -21,7 +21,7 @@ fi
 
 
 spack load bedtools2@2.27
-spack load samtools
+spack load /qr4zqdd ##samtools
 
 
 

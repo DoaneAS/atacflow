@@ -227,7 +227,7 @@ process ngtrim {
         ////clusterOptions '-l h_vmem=2G -l h_rt=24:00:00 -l athena=true'
         //scratch true
     time '8h'
-    queue 'panda'
+    queue 'panda_physbio'
     memory '12 GB'
 
     input:
@@ -261,7 +261,7 @@ process bt2 {
         executor 'slurm'
         memory '32 GB'
         time '18h'
-        queue 'panda'
+        queue 'panda_physbio'
         scratch true
         //penv 'smp'
         clusterOptions '--mem-per-cpu=4G --export=ALL'
@@ -295,7 +295,7 @@ process genrich {
 
     executor 'slurm'
     cpus 4
-    queue 'panda'
+    queue 'panda_physbio'
     time '18h'
     memory '24 GB'
     //penv 'smp'
@@ -325,10 +325,10 @@ process processbam {
     tag "$Sample"
     publishDir "$results_path/$Sample/$Sample", mode: 'copy'
 
-    executor 'slurm'
+    executor 'local'
     cpus 8
-    time '18h'
-    queue 'panda'
+    //time '18h'
+    //queue 'panda_physbio'
     memory '24 GB'
     //penv 'smp'
     //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
@@ -362,7 +362,6 @@ process processbam {
     ##. ~/.spackloads.sh
     ##source activate atacFlow
     processAlignment.nf.sh ${nbam} ${black} 8
-    source deactivate
     """
 }
 
@@ -380,7 +379,7 @@ process bam2bed {
    executor 'slurm'
    cpus 1
    time '18h'
-   queue 'panda'
+   queue 'panda_physbio'
    memory '12 GB'
    //penv 'smp'
    //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
@@ -412,7 +411,7 @@ process callpeaks {
 
     executor 'slurm'
     cpus 1
-    queue 'panda'
+    queue 'panda_physbio'
     time '8h'
     memory '12 GB'
     //penv 'smp'
@@ -433,9 +432,9 @@ process callpeaks {
     script:
     """
     #!/bin/bash -l
-    source activate idp2
+    conda activate idp2
     callbedpepeaks.sh ${rbed} ${Sample} ${sp}
-    source deactivate
+    conda deactivate
 
     """
         }
@@ -448,7 +447,7 @@ process signalTrack {
 
     conda 'bioconda::deeptools=3.3.0'
     executor 'slurm'
-    queue 'panda'
+    queue 'panda_physbio'
     //penv 'smp'
     memory { 8.GB * task.attempt }
     //clusterOptions '-l h_rt=48:00:00 -l athena=true'
@@ -482,11 +481,11 @@ process frip {
 
     publishDir "$results_path/$Sample/frip", mode: 'copy'
 
-   executor 'slurm'
-   cpus 1
-   queue 'panda'
-   time '8h'
-   memory '12 GB'
+    executor 'slurm'
+    cpus 1
+    queue 'panda_physbio'
+    time '8h'
+    memory '12 GB'
    //penv 'smp'
    //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
 
@@ -511,7 +510,7 @@ process frip {
     ##conda activate atacFlow
 
     encode_frip.py --chrsz ${chrsz} ${encodedhs} ${Sample}.nodup.bedpe.gz 
-    cp reg2map_honeybadger2_dnase_all_p10_ucsc.hg19_to_hg38.frip.qc ${Sample}.frip.qc.txt
+    cp *.frip.qc ${Sample}.frip.qc.txt
     """
 }
 
@@ -526,7 +525,7 @@ process picardqc {
     executor 'slurm'
     cpus 1
     time '8h'
-    queue 'panda'
+    queue 'panda_physbio'
     memory '12 GB'
     //penv 'smp'
     //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
@@ -541,8 +540,7 @@ process picardqc {
     script:
     """
     mkdir -p QCmetrics
-    source /home/asd2007/Scripts/picard.env 
-    picard EstimateLibraryComplexity I=${sortbam} O=${Sample}.EstimateLibraryComplexity.log
+    java -Xms500m -Xmx5g -jar /home/asd2007/Tools/picard/build/libs/picard.jar EstimateLibraryComplexity I=${sortbam} O=${Sample}.EstimateLibraryComplexity.log
     cp *.EstimateLibraryComplexity.log QCmetrics/${Sample}.picardcomplexity.qc
     """
 
@@ -573,7 +571,7 @@ process atacqc {
     executor 'slurm'
     cpus 4
     time '14h'
-    queue 'panda'
+    queue 'panda_physbio'
     memory '24 GB'
     //penv 'smp'
     //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
@@ -613,7 +611,7 @@ process atacqc {
     conda activate atacFlow && ${baseDir}/bin/run_ataqc.athena.py --workdir \$PWD  \\
     --outdir \$PWD \\
     --outprefix ${Sample} \\
-    --genome hg38 \\
+    --genome mm10 \\
     --ref ${ref} --tss ${tssenrich} \\
     --dnase ${dnase} \\
     --blacklist ${black} \\

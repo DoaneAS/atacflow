@@ -99,7 +99,15 @@ samtools index $out3
 
 out4=$(echo $out1 | sed 's/\.bam$/.nodup.noM.black.bam/')
 
-rmBlack.sh ${out3} ${BLACK}
+#rmBlack.sh ${out3} ${BLACK}
+
+
+
+spack load bedtools2@2.27
+#spack load /qr4zqdd ##samtools
+
+bedtools subtract -A -a ${out3} -b $BLACK > ${out4}
+
 samtools index ${out4}
 
 out5=$(echo $out1 | sed 's/\.bam$/.nsorted.nodup.noM.bam/')
@@ -118,11 +126,11 @@ sambamba sort --memory-limit 16GB -n -t ${NSLOTS} --tmpdir="${TMPDIR}" --out ${o
 
 ## make bam with marked dups and generate PBC file for QC
 ## BELOW for QC only
-
+echo "QC processing..."
 echo "Namesort ..."
 
 sambamba sort -n -u --memory-limit 16GB \
-         --nthreads ${NSLOTS} --tmpdir ${TMPDIR} --out ${out1prefix}.nsort.bam $p1
+         --nthreads ${NSLOTS} --tmpdir ${TMPDIR} --out ${out1prefix}.nsort.bam ${p1}
 
 #samtools sort -n $p1 -o ${out1prefix}.nsort.bam
 
@@ -133,11 +141,11 @@ samtools fixmate -r ${out1prefix}.nsort.bam ${out1prefix}.nsort.fixmate.bam
 #samtools view -F 1804 -f 2 -u  ${out1prefix}.nsort.fixmate.bam | samtools sort - > ${out1prefix}.filt.srt.bam
 
 samtools view -F 1804 -f 2 -u  ${out1prefix}.nsort.fixmate.bam | sambamba sort --memory-limit 16GB \
-                                                                          --nthreads ${NSLOTS} --tmpdir ${TMPDIR} /dev/stdin --out ${out1prefix}.filt.srt.bam
+                                                                          --nthreads ${NSLOTS} --tmpdir ${TMPDIR} --out ${out1prefix}.filt.srt.bam /dev/stdin
 
 #alias picard="java -Xms500m -Xmx5G -jar $PICARD"
 
-picard  MarkDuplicates VERBOSITY=ERROR QUIET=TRUE \
+picard MarkDuplicates VERBOSITY=ERROR QUIET=TRUE \
         INPUT=${out1prefix}.filt.srt.bam OUTPUT=${out1prefix}.dupmark.bam METRICS_FILE=${out1prefix}.dup.qc VALIDATION_STRINGENCY=LENIENT ASSUME_SORTED=true REMOVE_DUPLICATES=false
 
 #samtools sort -n ${out1prefix}.dupmark.bam -o ${out1prefix}.srt.tmp.bam
