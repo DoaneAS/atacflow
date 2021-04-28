@@ -16,10 +16,8 @@ samtools index ${sbam}
 ##source activate deep
 
 
-bamCoverage --bam ${sbam} --binSize 20 --outFileFormat bigwig --smoothLength 60 \
-            --normalizeUsing BPM \
-            --maxFragmentLength 150 \
-            -o ${outprefix}.bpm.sizefactors.bw --centerReads --extendReads --numberOfProcessors $MYSLOTS
+bamCoverage --bam ${sbam} --binSize 1 --outFileFormat bigwig --Offset -1 --maxFragmentLength 150 \
+            -o ${outprefix}.ins.bw --numberOfProcessors $MYSLOTS
 
 
 ##source deactivate

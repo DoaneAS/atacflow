@@ -386,8 +386,8 @@ def make_vplot(bam_file, tss, prefix, genome, read_len, bins=400, bp_edge=2000,
     at each TSS ordered by strength.
     '''
     logging.info('Generating vplot...')
-    vplot_file = '{0}_vplot.png'.format(prefix)
-    vplot_large_file = '{0}_large_vplot.png'.format(prefix)
+    vplot_file = '{0}_vplot.pdf'.format(prefix)
+    vplot_large_file = '{0}_large_vplot.pdf'.format(prefix)
 
     # Load the TSS file
     tss = pybedtools.BedTool(tss)

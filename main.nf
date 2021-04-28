@@ -200,8 +200,8 @@ fastq = Channel
        def list = line.split(',')
        def Sample = list[0]
        def path = file(list[1])
-       def reads = file("$path/*_R{1,2}_001.fastq.gz")
-       //def reads = file("$path/*.{R1,R2}.fastq.gz")
+       //def reads = file("$path/*_R{1,2}_001.fastq.gz")
+       def reads = file("$path/*_R{1,2}.fastq.gz")
        // def readsp = "$path/*{R1,R2}.trim.fastq.gz"
        //  def R1 = file(list[2])
        //    def R2 = file(list[3])
@@ -461,7 +461,7 @@ process signalTrack {
 
 
     output:
-    set Sample, file("${Sample}.bpm.sizefactors.bw") into insertionTrackbw
+    set Sample, file("${Sample}.ins.bw") into insertionTrackbw
 
     script:
     """
@@ -570,11 +570,10 @@ process atacqc {
 
     executor 'slurm'
     cpus 4
-    time '14h'
+    time '32h'
     queue 'panda_physbio'
-    memory '24 GB'
-    //penv 'smp'
-    //clusterOptions '-l h_vmem=4G -l h_rt=16:00:00 -l athena=true'
+    memory '32 GB'
+    //  scratch true // set in config
 
     input:
     set Sample, file(file_list) from qcin
@@ -627,7 +626,7 @@ process atacqc {
     --pbc ${Sample}.pbc.qc \\
     --finalbam ${Sample}.sorted.nodup.noM.black.bam \\
     --finalbed ${Sample}.nodup.tn5.tagAlign.gz \\
-    --bigwig ${Sample}.bpm.sizefactors.bw \\
+    --bigwig ${Sample}.ins.bw \\
     --peaks ${Sample}.tn5.broadPeak.gz \\
     --naive_overlap_peaks ${Sample}.tn5.broadPeak.gz \\
     --idr_peaks ${Sample}.tn5.broadPeak.gz  --processes ${task.cpus}
