@@ -388,6 +388,7 @@ def make_vplot(bam_file, tss, prefix, genome, read_len, bins=400, bp_edge=2000,
     logging.info('Generating vplot...')
     vplot_file = '{0}_vplot.pdf'.format(prefix)
     vplot_large_file = '{0}_large_vplot.pdf'.format(prefix)
+    tss_log_file = '{0}.tss_enrich.qc'.format(prefix)
 
     # Load the TSS file
     tss = pybedtools.BedTool(tss)
@@ -429,6 +430,9 @@ def make_vplot(bam_file, tss, prefix, genome, read_len, bins=400, bp_edge=2000,
 
     # Note the middle high point (TSS)
     tss_point_val = max(bam_array.mean(axis=0))
+
+    with open(tss_log_file, 'w') as fp:
+        fp.write(str(tss_point_val))
 
     ax.set_xlabel('Distance from TSS (bp)')
     ax.set_ylabel('Average read coverage (per million mapped reads)')
@@ -559,7 +563,7 @@ def get_mito_dups(sorted_bam, prefix, endedness='Paired-ended', use_sambamba=Fal
     index_file = 'samtools index {0}'.format(out_file)
     os.system(index_file)
 
-    # Get the mitochondrial reads that are marked duplicates
+    # Get the mitochondrial reads tat are marked duplicates
     mito_dups = int(subprocess.check_output(['samtools',
                                              'view', '-f', '1024',
                                              '-c', out_file, 'chrM']).strip())
@@ -1635,7 +1639,7 @@ def main():
 
         # Annotation based statistics
         ('enrichment_plots', ENRICHMENT_PLOTS),
-       # ('TSS_enrichment', tss_point_val),
+        ('TSS_enrichment', tss_point_val),
         ('annot_enrichments', ANNOT_ENRICHMENTS_OUT),
 
         # Roadmap plot

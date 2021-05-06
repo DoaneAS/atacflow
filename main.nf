@@ -588,7 +588,7 @@ process atacqc {
     file(reg2mapbed) from reg2mapbed
 
     output:
-    set Sample, file("${Sample}*.preseq.log"), file("${Sample}*_qc.txt"), file("${Sample}*large_vplot.png"), file("${Sample}*vplot.png"), file("${Sample}_qc.trad.txt"), file("${Sample}*qc.html"), file("*qc.save") into qcdat
+    set Sample, file("${Sample}*.preseq.log"), file("${Sample}*_qc.txt"), file("${Sample}*large_vplot.pdf"), file("${Sample}*vplot.pdf"), file("${Sample}_qc.trad.txt"), file("${Sample}*qc.html"), file("*qc.save") into qcdat
     set Sample, file("*.log"), file("*qc") into logs
 
 
