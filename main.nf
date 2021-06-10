@@ -22,7 +22,7 @@ params.index = 'sampleIndex.csv'
 params.outdir = "$baseDir/results"
 params.name = false
 params.project = false
-       //params.genome = 'hg38'
+params.genome = ''
 params.genomes = []
 params.fasta = params.genome ? params.genomes[ params.genome ].fasta ?: false : false
 params.bwa_index = params.genome ? params.genomes[ params.genome ].bwa ?: false : false
@@ -118,7 +118,7 @@ black = file(params.black)
 encodedhs = file(params.encodedhs)
 chrsz = file(params.chrsz)
 species = params.species
-
+genome = params.genome
 
 if (params.bt2_index){
     lastPath = params.bt2_index.lastIndexOf(File.separator)
@@ -586,6 +586,7 @@ process atacqc {
     file(ref) from ref
     file(black) from blackqc
     file(reg2mapbed) from reg2mapbed
+    val genome
 
     output:
     set Sample, file("${Sample}*.preseq.log"), file("${Sample}*_qc.txt"), file("${Sample}*large_vplot.pdf"), file("${Sample}*vplot.pdf"), file("${Sample}_qc.trad.txt"), file("${Sample}*qc.html"), file("*qc.save") into qcdat
@@ -610,7 +611,7 @@ process atacqc {
     conda activate atacFlow && ${baseDir}/bin/run_ataqc.athena.py --workdir \$PWD  \\
     --outdir \$PWD \\
     --outprefix ${Sample} \\
-    --genome mm10 \\
+    --genome ${genome} \\
     --ref ${ref} --tss ${tssenrich} \\
     --dnase ${dnase} \\
     --blacklist ${black} \\
